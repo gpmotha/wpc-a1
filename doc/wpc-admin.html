@@ -941,9 +941,9 @@ function renderStats() {
   const winrate = PROJECTS.length>0 ? Math.round((elfogadva/PROJECTS.length)*100) : 0;
   document.getElementById('stat-strip-ajanlatok').innerHTML = `
     <div class="stat-cell"><div class="stat-lbl">Összes ajánlat</div><div class="stat-val">${PROJECTS.length}</div><div class="stat-detail">minden státusz</div></div>
-    <div class="stat-cell"><div class="stat-lbl">Függőben</div><div class="stat-val" style="color:var(--blue)">${PROJECTS.filter(p=>['erdeklodo','ajanlat'].includes(p.statusz)).length}</div><div class="stat-detail">döntésre vár</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Függőben</div><div class="stat-val" style="color:var(--sky)">${PROJECTS.filter(p=>['erdeklodo','ajanlat'].includes(p.statusz)).length}</div><div class="stat-detail">döntésre vár</div></div>
     <div class="stat-cell"><div class="stat-lbl">Pipeline</div><div class="stat-val" style="font-size:18px">${(pipeline2/1000000).toFixed(1)}M Ft</div><div class="stat-detail">nettó, függőben</div></div>
-    <div class="stat-cell"><div class="stat-lbl">Win rate</div><div class="stat-val" style="color:var(--green)">${winrate}%</div><div class="stat-detail">elfogadott / összes</div></div>
+    <div class="stat-cell"><div class="stat-lbl">Win rate</div><div class="stat-val" style="color:var(--moss)">${winrate}%</div><div class="stat-detail">elfogadott / összes</div></div>
     <div class="stat-cell"><div class="stat-lbl">Lemondva</div><div class="stat-val" style="color:var(--red)">${PROJECTS.filter(p=>p.statusz==='lemondva').length}</div><div class="stat-detail">elveszett ajánlat</div></div>
   `;
 
@@ -1044,7 +1044,7 @@ function openDetail(id) {
 
   // Lifecycle bar
   const li = STATUS_META[p.statusz]?.lifecycle ?? -1;
-  document.getElementById('m-lifecycle').innerHTML = `<div class="lifecycle">${LIFECYCLE_STEPS.map((s,i)=>`<div class="lifecycle-step ${i===li?'current':i<li?'done':''}">${s}</div>`).join('')}</div>`;
+  document.getElementById('m-lifecycle').innerHTML = `<div class="lifecycle">${LIFECYCLE_STEPS.map((s,i)=>`<div class="lc-step ${i===li?'current':i<li?'done':''}">${s}</div>`).join('')}</div>`;
 
   // Alapadatok
   document.getElementById('m-alapadatok').innerHTML = `
@@ -1108,7 +1108,23 @@ function openDetail(id) {
   document.getElementById('m-log').textContent = p.logisztika||'—';
   document.getElementById('m-notes').textContent = (p.kulonleges||'') + (p.megjegyzes?' · '+p.megjegyzes:'') || '—';
 
+  document.getElementById('modal-actions-bar').innerHTML = `
+    <button class="btn-panel danger" onclick="setLemondva()">Lemondva</button>
+    <button class="btn-panel" onclick="showToast('PDF letöltve')">↓ PDF</button>
+    <button class="btn-panel" onclick="showToast('Kiosztási terv megnyitva')">⊞ Terv</button>
+    <button class="btn-panel primary" onclick="enterEditMode()">Szerkesztés</button>
+  `;
+
   document.getElementById('detailModal').classList.add('open');
+}
+function setLemondva() {
+  const p = PROJECTS.find(x=>x.id===currentDetailId);
+  if (!p) return;
+  if (!confirm('Biztosan lemondja a projektet?')) return;
+  p.statusz = 'lemondva';
+  showToast('Lemondás rögzítve');
+  renderAll();
+  openDetail(currentDetailId);
 }
 function closeDetail() { document.getElementById('detailModal').classList.remove('open'); currentDetailId=null; }
 function closeDetailOnBg(e) { if (e.target===document.getElementById('detailModal')) closeDetail(); }
@@ -1132,10 +1148,10 @@ function enterEditMode() {
   const FAZISOK = [{v:'',l:'— egyfázisú —'},{v:'I. ütem',l:'I. ütem'},{v:'II. ütem',l:'II. ütem'},{v:'III. ütem',l:'III. ütem'}];
 
   function inp(id, val, type='text', ph='') {
-    return `<input class="ie-input" id="ie-${id}" type="${type}" value="${val??''}" placeholder="${ph}" style="width:100%;font-family:var(--mono);font-size:12px;color:var(--text);background:var(--bg);border:1px solid var(--border);padding:6px 10px;outline:none;">`;
+    return `<input class="ie-input" id="ie-${id}" type="${type}" value="${val??''}" placeholder="${ph}" style="width:100%;font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:1px solid var(--rule-2);padding:6px 10px;outline:none;border-radius:5px;">`;
   }
   function sel(id, opts, cur) {
-    return `<select class="ie-input" id="ie-${id}" style="width:100%;font-family:var(--mono);font-size:12px;color:var(--text);background:var(--bg);border:1px solid var(--border);padding:6px 10px;outline:none;appearance:none;">${opts.map(o=>typeof o==='string'?`<option${o===cur?' selected':''}>${o}</option>`:`<option value="${o.v}"${o.v===cur?' selected':''}>${o.l}</option>`).join('')}</select>`;
+    return `<select class="ie-input" id="ie-${id}" style="width:100%;font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:1px solid var(--rule-2);padding:6px 10px;outline:none;border-radius:5px;">${opts.map(o=>typeof o==='string'?`<option${o===cur?' selected':''}>${o}</option>`:`<option value="${o.v}"${o.v===cur?' selected':''}>${o.l}</option>`).join('')}</select>`;
   }
   function chk(id, val, lbl) {
     return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-mid);cursor:pointer;"><input type="checkbox" id="ie-${id}" ${val?'checked':''} style="accent-color:var(--amber);width:14px;height:14px;"> ${lbl}</label>`;
@@ -1192,8 +1208,8 @@ function enterEditMode() {
   document.getElementById('m-garancia-section').style.display = p.ten_befejezes ? 'block' : 'none';
 
   // Logisztika / notes as textareas
-  document.getElementById('m-log').innerHTML = `<textarea id="ie-logisztika" style="width:100%;min-height:80px;font-family:var(--mono);font-size:12px;color:var(--text);background:var(--bg);border:none;outline:none;resize:vertical;line-height:1.6;">${p.logisztika||''}</textarea>`;
-  document.getElementById('m-notes').innerHTML = `<textarea id="ie-kulonleges" style="width:100%;min-height:80px;font-family:var(--mono);font-size:12px;color:var(--text);background:var(--bg);border:none;outline:none;resize:vertical;line-height:1.6;">${p.kulonleges||''}</textarea>`;
+  document.getElementById('m-log').innerHTML = `<textarea id="ie-logisztika" style="width:100%;min-height:80px;font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:none;outline:none;resize:vertical;line-height:1.6;">${p.logisztika||''}</textarea>`;
+  document.getElementById('m-notes').innerHTML = `<textarea id="ie-kulonleges" style="width:100%;min-height:80px;font-family:var(--mono);font-size:12px;color:var(--ink);background:var(--paper);border:none;outline:none;resize:vertical;line-height:1.6;">${p.kulonleges||''}</textarea>`;
 
   // Swap action bar
   document.getElementById('modal-actions-bar').innerHTML = `
