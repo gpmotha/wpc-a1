@@ -1,8 +1,21 @@
+{% set sc = {
+  "felmérendő": "s-felmerendo",
+  "lebeszélve": "s-lebeszélve",
+  "betervezve": "s-betervezve",
+  "folyamatban": "s-folyamatban",
+  "kész": "s-kesz",
+  "törölt": "s-torolt"
+} %}
 <div class="dp-header">
   <div>
     <div class="dp-id">{{ "WPC-%04d"|format(p.id) }}</div>
     <div class="dp-name">{{ p.client_name }}</div>
     {% if p.address %}<div class="dp-addr">{{ p.address }}</div>{% endif %}
+    <div style="margin-top:8px">
+      <span class="status {{ sc.get(p.status.value, '') }}">
+        <span class="status-dot"></span>{{ p.status.value }}
+      </span>
+    </div>
   </div>
   <button class="close-btn" onclick="closeDetail()">✕</button>
 </div>

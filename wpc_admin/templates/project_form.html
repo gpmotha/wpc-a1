@@ -39,7 +39,8 @@
       </div>
       <div class="field">
         <label>Számla típusa</label>
-        <select name="invoice_type">
+        <select name="invoice_type" required>
+          {% if not p %}<option value="" disabled selected>— válassz —</option>{% endif %}
           {% for opt in InvoiceType %}
           <option value="{{ opt.value }}"{% if p and p.invoice_type == opt %} selected{% endif %}>{{ opt.value }}</option>
           {% endfor %}
@@ -74,7 +75,8 @@
     <div class="form-row">
       <div class="field">
         <label>Munka típusa</label>
-        <select name="job_type">
+        <select name="job_type" required>
+          {% if not p %}<option value="" disabled selected>— válassz —</option>{% endif %}
           {% for opt in JobType %}
           <option value="{{ opt.value }}"{% if p and p.job_type == opt %} selected{% endif %}>{{ opt.value }}</option>
           {% endfor %}
@@ -82,7 +84,8 @@
       </div>
       <div class="field">
         <label>Forgalmazó</label>
-        <select name="distributor">
+        <select name="distributor" required>
+          {% if not p %}<option value="" disabled selected>— válassz —</option>{% endif %}
           {% for opt in Distributor %}
           <option value="{{ opt.value }}"{% if p and p.distributor == opt %} selected{% endif %}>{{ opt.value }}</option>
           {% endfor %}
@@ -106,7 +109,8 @@
       </div>
       <div class="field">
         <label>Csapat</label>
-        <select name="crew">
+        <select name="crew" required>
+          {% if not p %}<option value="" disabled selected>— válassz —</option>{% endif %}
           {% for opt in Crew %}
           <option value="{{ opt.value }}"{% if p and p.crew == opt %} selected{% endif %}>{{ opt.value }}</option>
           {% endfor %}
