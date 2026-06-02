@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Projektek{% endblock %}
+
+{% block topbar_actions %}
+<a href="/projects/new" class="topbar-primary">+ Új projekt</a>
+{% endblock %}
+
+{% block content %}
+<div class="stage__head">
+  <div class="stage__kicker">01 · Munkák</div>
+  <h1 class="stage__title">Aktív projektek</h1>
+  <p class="stage__lead">Összes munka, szűrés státusz és csapat szerint.</p>
+</div>
+
+<div class="stat-strip">
+  <div class="stat-cell">
+    <div class="l">Összes projekt</div>
+    <div class="v">{{ stats.total }}</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Folyamatban</div>
+    <div class="v">{{ stats.folyamatban }}</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Betervezve</div>
+    <div class="v">{{ stats.betervezve }}</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Havi bevétel nettó</div>
+    <div class="v">{{ stats.havi_bevetel | huf }}</div>
+    <div class="d">lezárt munkák, folyó hó</div>
+  </div>
+</div>
+
+<div class="filter-bar">
+  <span class="filter-label">Szűrő</span>
+  {% for val, label in [
+    ("", "Mind"),
+    ("felmérendő", "Felmérendő"),
+    ("lebeszélve", "Lebeszélve"),
+    ("betervezve", "Betervezve"),
+    ("folyamatban", "Folyamatban"),
+    ("kész", "Kész")
+  ] %}
+  <button
+    class="filter-btn {% if status_filter == val %}active{% endif %}"
+    hx-get="/"
+    hx-target="#project-table"
+    hx-swap="innerHTML"
+    hx-vals='{"status_filter": "{{ val }}"}'
+    hx-include="[name='q']"
+    onclick="document.getElementById('sf').value='{{ val }}'; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"
+  >{{ label }}</button>
+  {% endfor %}
+
+  <input type="hidden" name="status_filter" id="sf" value="{{ status_filter }}">
+
+  <div class="filter-search">
+    <svg viewBox="0 0 20 20" style="width:14px;height:14px;stroke:var(--ink-4);fill:none;stroke-width:1.7;flex-shrink:0">
+      <circle cx="8.5" cy="8.5" r="5"/><path d="M13 13l3.5 3.5"/>
+    </svg>
+    <input
+      type="text"
+      name="q"
+      id="qInput"
+      value="{{ q }}"
+      placeholder="Keresés…"
+      hx-get="/"
+      hx-target="#project-table"
+      hx-swap="innerHTML"
+      hx-trigger="keyup changed delay:300ms"
+      hx-include="[name='status_filter']"
+    >
+  </div>
+</div>
+
+<div id="project-table">
+  {% include "project_table.html" %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function highlightRow(tr) {
+  document.querySelectorAll('tbody tr.selected').forEach(r => r.classList.remove('selected'));
+  tr.classList.add('selected');
+}
+</script>
+{% endblock %}

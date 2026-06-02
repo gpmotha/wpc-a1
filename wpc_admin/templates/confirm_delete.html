@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Törlés megerősítése{% endblock %}
+
+{% block breadcrumb %}
+  <span>Projektek</span> / <span>{{ p.client_name }}</span> / <span>Törlés</span>
+{% endblock %}
+
+{% block content %}
+<div class="confirm-box">
+  <h2>Projekt törlése</h2>
+  <p>Biztosan törölni szeretnéd ezt a projektet?<br>
+     <strong>{{ p.client_name }}</strong> — {{ p.address }}<br>
+     Ez a művelet nem visszavonható (a rekord töröltként lesz megjelölve).</p>
+  <div class="form-actions">
+    <a href="/" class="btn ghost">Mégsem</a>
+    <form method="post" style="display:inline">
+      <button type="submit" class="btn" style="background:var(--red);border-color:var(--red)">
+        Igen, törlöm
+      </button>
+    </form>
+  </div>
+</div>
+{% endblock %}

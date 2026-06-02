@@ -1,0 +1,152 @@
+<div class="dp-header">
+  <div>
+    <div class="dp-id">{{ "WPC-%04d"|format(p.id) }}</div>
+    <div class="dp-name">{{ p.client_name }}</div>
+    {% if p.address %}<div class="dp-addr">{{ p.address }}</div>{% endif %}
+  </div>
+  <button class="close-btn" onclick="closeDetail()">✕</button>
+</div>
+
+<div class="dp-body">
+
+  <div class="dp-section">
+    <div class="sec-label">Projekt adatok</div>
+    <div class="field-grid">
+      <div class="fi">
+        <div class="fl">Típus</div>
+        <div class="fv">{{ p.job_type.value }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Forgalmazó</div>
+        <div class="fv">{{ p.distributor.value }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Csapat</div>
+        <div class="fv">{{ p.crew.value }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Fázis</div>
+        <div class="fv">{{ p.phase or "—" }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Prioritás</div>
+        <div class="fv">{{ p.priority.value }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Terület</div>
+        <div class="fv mono">{% if p.area_m2 %}{{ p.area_m2 }} m²{% else %}—{% endif %}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Szín</div>
+        <div class="fv">{{ p.color or "—" }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Felmérés dátuma</div>
+        <div class="fv mono">{{ p.survey_date or "—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dp-section">
+    <div class="sec-label">Díjbontás</div>
+    <div class="dij-table">
+      {% if p.cost %}
+      <div class="dij-row">
+        <span class="dk">Munkadíj</span>
+        <span class="dv">{{ p.cost.labor_fee | huf }}</span>
+      </div>
+      <div class="dij-row">
+        <span class="dk">Kiszállási díj</span>
+        <span class="dv">{{ p.cost.travel_fee | huf }}</span>
+      </div>
+      <div class="dij-row">
+        <span class="dk">Forgalmazói jutalék</span>
+        <span class="dv">{{ p.cost.distributor_commission | huf }}</span>
+      </div>
+      <div class="dij-row">
+        <span class="dk">Segédanyag</span>
+        <span class="dv">{{ p.cost.materials_fee | huf }}</span>
+      </div>
+      <div class="dij-row total">
+        <span class="dk">Összesen nettó</span>
+        <span class="dv">{{ p.total_net | huf }}</span>
+      </div>
+      {% if p.vat_invoice %}
+      <div class="dij-row gross">
+        <span class="dk">Összesen bruttó (+27% ÁFA)</span>
+        <span class="dv">{{ p.total_gross | huf }}</span>
+      </div>
+      {% endif %}
+      {% else %}
+      <div class="dij-row">
+        <span class="dk">Nincs díjbontás</span>
+        <span class="dv">—</span>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="dp-section">
+    <div class="sec-label">Dátumok</div>
+    <div class="field-grid c3">
+      <div class="fi">
+        <div class="fl">Tervezett kezdés</div>
+        <div class="fv mono">{{ p.planned_start_date or "—" }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Terv. munkanapok</div>
+        <div class="fv mono">{{ p.planned_work_days or "—" }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Tényleges kezdés</div>
+        <div class="fv mono">{{ p.actual_start_date or "—" }}</div>
+      </div>
+      <div class="fi">
+        <div class="fl">Tényleges befejezés</div>
+        <div class="fv mono">{{ p.actual_end_date or "—" }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="dp-section">
+    <div class="sec-label">Logisztika</div>
+    {% set log = p.logistics %}
+    {% if log and (log.key_code or log.power_access or log.parking or log.materials_to_bring or log.arrival_time) %}
+    <div class="log-block">
+      {% if log.key_code %}<div><strong>Kulcskód:</strong> {{ log.key_code }}</div>{% endif %}
+      {% if log.power_access %}<div><strong>Áramvétel:</strong> {{ log.power_access }}</div>{% endif %}
+      {% if log.parking %}<div><strong>Parkolás:</strong> {{ log.parking }}</div>{% endif %}
+      {% if log.materials_to_bring %}<div><strong>Anyagok:</strong> {{ log.materials_to_bring }}</div>{% endif %}
+      {% if log.arrival_time %}<div><strong>Érkezési idő:</strong> {{ log.arrival_time }}</div>{% endif %}
+    </div>
+    {% else %}
+    <div class="log-block empty">Nincs logisztikai adat megadva.</div>
+    {% endif %}
+  </div>
+
+  <div class="dp-section">
+    <div class="sec-label">Megjegyzések</div>
+    {% set has_notes = p.notes or (p.logistics and p.logistics.special_requests) %}
+    {% if has_notes %}
+    <div class="log-block">
+      {% if p.notes %}<div>{{ p.notes }}</div>{% endif %}
+      {% if p.logistics and p.logistics.special_requests %}
+        <div {% if p.notes %}style="margin-top:6px"{% endif %}>{{ p.logistics.special_requests }}</div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="log-block empty">Nincs megjegyzés.</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<div class="dp-footer">
+  <button class="btn-dp" onclick="showToast('Hamarosan elérhető')">↓ PDF</button>
+  {% if p.planner_project_id %}
+  <a class="btn-dp" href="/planner/projects/{{ p.id }}">⊞ Kiosztási terv</a>
+  {% else %}
+  <button class="btn-dp" onclick="showToast('Nincs csatolva kiosztási terv')">⊞ Kiosztási terv</button>
+  {% endif %}
+  <a class="btn-dp primary" href="/projects/{{ p.id }}/edit">Szerkesztés</a>
+</div>

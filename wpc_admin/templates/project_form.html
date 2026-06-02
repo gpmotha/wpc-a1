@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}{% if p %}Szerkesztés{% else %}Új projekt{% endif %}{% endblock %}
+
+{% block breadcrumb %}
+  <span>Projektek</span> / <span>{% if p %}{{ p.client_name }}{% else %}Új projekt{% endif %}</span>
+{% endblock %}
+
+{% block content %}
+<div class="stage__head">
+  <div class="stage__kicker">{% if p %}Projekt szerkesztése{% else %}Új projekt{% endif %}</div>
+  <h1 class="stage__title">{% if p %}{{ p.client_name }}{% else %}Új projekt létrehozása{% endif %}</h1>
+</div>
+
+<form method="post" action="{% if p %}/projects/{{ p.id }}/edit{% else %}/projects/new{% endif %}" class="form-page">
+
+  <!-- 1. Ügyfél adatok -->
+  <div class="form-section">
+    <div class="form-section-title">Ügyfél adatok</div>
+    <div class="form-row">
+      <div class="field">
+        <label>Megrendelő neve <em>*</em></label>
+        <input type="text" name="client_name" value="{{ p.client_name if p else '' }}" required>
+      </div>
+      <div class="field">
+        <label>Telefon</label>
+        <input type="text" name="phone" value="{{ p.phone if p and p.phone else '' }}">
+      </div>
+    </div>
+    <div class="form-row c1">
+      <div class="field">
+        <label>Cím</label>
+        <input type="text" name="address" value="{{ p.address if p and p.address else '' }}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Email</label>
+        <input type="email" name="email" value="{{ p.email if p and p.email else '' }}">
+      </div>
+      <div class="field">
+        <label>Számla típusa</label>
+        <select name="invoice_type">
+          {% for opt in InvoiceType %}
+          <option value="{{ opt.value }}"{% if p and p.invoice_type == opt %} selected{% endif %}>{{ opt.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Munka adatok -->
+  <div class="form-section">
+    <div class="form-section-title">Munka adatok</div>
+    <div class="form-row">
+      <div class="field">
+        <label>Státusz</label>
+        <select name="status">
+          {% for opt in ProjectStatus %}
+          {% if opt.value != 'törölt' %}
+          <option value="{{ opt.value }}"{% if p and p.status == opt %} selected{% elif not p and opt.value == 'felmérendő' %} selected{% endif %}>{{ opt.value }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Prioritás</label>
+        <select name="priority">
+          {% for opt in Priority %}
+          <option value="{{ opt.value }}"{% if p and p.priority == opt %} selected{% elif not p and opt.value == 'Normal' %} selected{% endif %}>{{ opt.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Munka típusa</label>
+        <select name="job_type">
+          {% for opt in JobType %}
+          <option value="{{ opt.value }}"{% if p and p.job_type == opt %} selected{% endif %}>{{ opt.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Forgalmazó</label>
+        <select name="distributor">
+          {% for opt in Distributor %}
+          <option value="{{ opt.value }}"{% if p and p.distributor == opt %} selected{% endif %}>{{ opt.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Fázis</label>
+        <input type="text" name="phase" value="{{ p.phase if p and p.phase else '' }}" placeholder="pl. I. ütem">
+      </div>
+      <div class="field">
+        <label>Terület m²</label>
+        <input type="number" name="area_m2" step="0.1" value="{{ p.area_m2 if p and p.area_m2 is not none else '' }}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Szín</label>
+        <input type="text" name="color" value="{{ p.color if p and p.color else '' }}">
+      </div>
+      <div class="field">
+        <label>Csapat</label>
+        <select name="crew">
+          {% for opt in Crew %}
+          <option value="{{ opt.value }}"{% if p and p.crew == opt %} selected{% endif %}>{{ opt.value }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Jelzők -->
+  <div class="form-section">
+    <div class="form-section-title">Jelzők</div>
+    <div class="check-row">
+      <label class="check-item">
+        <input type="checkbox" name="crew_confirmed"{% if p and p.crew_confirmed %} checked{% endif %}>
+        Csapat megerősítve
+      </label>
+      <label class="check-item">
+        <input type="checkbox" name="vat_invoice"{% if p and p.vat_invoice %} checked{% endif %}>
+        Áfás számla
+      </label>
+      <label class="check-item">
+        <input type="checkbox" name="welding_required"{% if p and p.welding_required %} checked{% endif %}>
+        Hegesztés szükséges
+      </label>
+      <label class="check-item">
+        <input type="checkbox" name="covered_area"{% if p and p.covered_area %} checked{% endif %}>
+        Fedett terület
+      </label>
+    </div>
+  </div>
+
+  <!-- 4. Dátumok -->
+  <div class="form-section">
+    <div class="form-section-title">Dátumok</div>
+    <div class="form-row c3">
+      <div class="field">
+        <label>Felmérés dátuma</label>
+        <input type="date" name="survey_date" value="{{ p.survey_date if p and p.survey_date else '' }}">
+      </div>
+      <div class="field">
+        <label>Ideális kezdés</label>
+        <input type="date" name="ideal_start_date" value="{{ p.ideal_start_date if p and p.ideal_start_date else '' }}">
+      </div>
+      <div class="field">
+        <label>Tervezett kezdés</label>
+        <input type="date" name="planned_start_date" value="{{ p.planned_start_date if p and p.planned_start_date else '' }}">
+      </div>
+    </div>
+    <div class="form-row c3">
+      <div class="field">
+        <label>Tervezett munkanapok</label>
+        <input type="number" name="planned_work_days" value="{{ p.planned_work_days if p and p.planned_work_days is not none else '' }}">
+      </div>
+      <div class="field">
+        <label>Tényleges kezdés</label>
+        <input type="date" name="actual_start_date" value="{{ p.actual_start_date if p and p.actual_start_date else '' }}">
+      </div>
+      <div class="field">
+        <label>Tényleges befejezés</label>
+        <input type="date" name="actual_end_date" value="{{ p.actual_end_date if p and p.actual_end_date else '' }}">
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Díjak -->
+  <div class="form-section">
+    <div class="form-section-title">Díjak (nettó Ft)</div>
+    <div class="form-row">
+      <div class="field">
+        <label>Munkadíj</label>
+        <input type="number" name="labor_fee" value="{{ p.cost.labor_fee if p and p.cost else 0 }}">
+      </div>
+      <div class="field">
+        <label>Kiszállási díj</label>
+        <input type="number" name="travel_fee" value="{{ p.cost.travel_fee if p and p.cost else 0 }}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Forgalmazói jutalék</label>
+        <input type="number" name="distributor_commission" value="{{ p.cost.distributor_commission if p and p.cost else 0 }}">
+      </div>
+      <div class="field">
+        <label>Segédanyag díja</label>
+        <input type="number" name="materials_fee" value="{{ p.cost.materials_fee if p and p.cost else 0 }}">
+      </div>
+    </div>
+    <div class="hint">Csak szám, Ft jel nélkül</div>
+  </div>
+
+  <!-- 6. Logisztika & Megjegyzések -->
+  <div class="form-section">
+    <div class="form-section-title">Logisztika &amp; Megjegyzések</div>
+    <div class="form-row">
+      <div class="field">
+        <label>Kulcskód / bejutás</label>
+        <input type="text" name="key_code" value="{{ p.logistics.key_code if p and p.logistics and p.logistics.key_code else '' }}">
+      </div>
+      <div class="field">
+        <label>Áramvétel helye</label>
+        <input type="text" name="power_access" value="{{ p.logistics.power_access if p and p.logistics and p.logistics.power_access else '' }}">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="field">
+        <label>Érkezési idő</label>
+        <input type="text" name="arrival_time" value="{{ p.logistics.arrival_time if p and p.logistics and p.logistics.arrival_time else '' }}" placeholder="pl. 08:00">
+      </div>
+      <div class="field">
+        <label>Parkolás</label>
+        <input type="text" name="parking" value="{{ p.logistics.parking if p and p.logistics and p.logistics.parking else '' }}">
+      </div>
+    </div>
+    <div class="form-row c1">
+      <div class="field">
+        <label>Anyagok (Zsolt viszi)</label>
+        <textarea name="materials_to_bring" rows="3">{{ p.logistics.materials_to_bring if p and p.logistics and p.logistics.materials_to_bring else '' }}</textarea>
+      </div>
+    </div>
+    <div class="form-row c1">
+      <div class="field">
+        <label>Különleges kérések</label>
+        <textarea name="special_requests" rows="3">{{ p.logistics.special_requests if p and p.logistics and p.logistics.special_requests else '' }}</textarea>
+      </div>
+    </div>
+    <div class="form-row c1">
+      <div class="field">
+        <label>Megjegyzések</label>
+        <textarea name="notes" rows="3">{{ p.notes if p and p.notes else '' }}</textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="form-actions">
+    <a href="/" class="btn ghost">Mégsem</a>
+    <button type="submit" class="btn">{% if p %}Mentés{% else %}Projekt létrehozása{% endif %}</button>
+    {% if p %}
+    <a href="/projects/{{ p.id }}/delete" class="btn ghost" style="margin-left:auto;color:var(--red)">Törlés</a>
+    {% endif %}
+  </div>
+
+</form>
+{% endblock %}

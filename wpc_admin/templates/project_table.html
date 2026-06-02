@@ -1,0 +1,54 @@
+{% set sc = {
+  "felmérendő": "s-felmerendo",
+  "lebeszélve": "s-lebeszélve",
+  "betervezve": "s-betervezve",
+  "folyamatban": "s-folyamatban",
+  "kész": "s-kesz",
+  "törölt": "s-torolt"
+} %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Megrendelő / Helyszín</th>
+        <th>Típus</th>
+        <th>Csapat</th>
+        <th>Státusz</th>
+        <th>Tervezett kezdés</th>
+        <th>Munkadíj nettó</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in projects %}
+      <tr
+        hx-get="/projects/{{ p.id }}/detail"
+        hx-target="#detail-panel"
+        hx-swap="innerHTML"
+        onclick="highlightRow(this)"
+      >
+        <td>
+          <div class="td-name">{{ p.client_name }}</div>
+          {% if p.address %}<div class="td-sub">{{ p.address }}</div>{% endif %}
+        </td>
+        <td>{{ p.job_type.value }}</td>
+        <td>{{ p.crew.value }}</td>
+        <td>
+          <span class="status {{ sc.get(p.status.value, '') }}">
+            <span class="status-dot"></span>{{ p.status.value }}
+          </span>
+        </td>
+        <td class="td-mono">{{ p.planned_start_date or "—" }}</td>
+        <td class="td-mono">{% if p.cost %}{{ p.cost.labor_fee | huf }}{% else %}—{% endif %}</td>
+        <td class="td-arrow">→</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;color:var(--ink-4);font-family:var(--mono);font-size:12px;padding:32px 14px">
+          Nincs találat
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
