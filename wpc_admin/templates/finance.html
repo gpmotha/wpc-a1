@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Pénzügyek{% endblock %}
+
+{% block breadcrumb %}<span>Pénzügyek</span>{% endblock %}
+
+{% block content %}
+<div class="stage__head">
+  <div class="stage__kicker">Pénzügyek</div>
+  <h1 class="stage__title">Bevételek &amp; Pipeline</h1>
+  <p class="stage__lead">Lezárt munkák bevételei, pipeline értéke és forgalmazói/csapat bontás.</p>
+</div>
+
+<!-- Summary stat strip -->
+<div class="stat-strip" style="grid-template-columns:repeat(4,1fr)">
+  <div class="stat-cell">
+    <div class="l">Havi bevétel (nettó)</div>
+    <div class="v" style="font-size:18px">{{ stats.monthly_net | huf }}</div>
+    <div class="d">{{ stats.monthly_count }} lezárt munka, folyó hó</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Éves bevétel (nettó)</div>
+    <div class="v" style="font-size:18px">{{ stats.ytd_net | huf }}</div>
+    <div class="d">{{ stats.ytd_count }} lezárt munka, {{ today.year }}</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Pipeline értéke</div>
+    <div class="v" style="font-size:18px">{{ stats.pipeline_value | huf }}</div>
+    <div class="d">{{ stats.pipeline_count }} aktív / ütemezett munka</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Összes bevétel</div>
+    <div class="v" style="font-size:18px">{{ stats.total_all_time | huf }}</div>
+    <div class="d">összes lezárt munka</div>
+  </div>
+</div>
+
+<!-- Row 1: monthly chart + top projects -->
+<div class="fin-grid">
+
+  <!-- Monthly revenue chart -->
+  <div class="fin-card">
+    <div class="fin-card__title">Havi bevételek (utolsó 6 hónap)</div>
+    {% if monthly_breakdown and monthly_breakdown | map(attribute='net') | max > 0 %}
+    {% set max_net = monthly_breakdown | map(attribute='net') | max %}
+    <div class="fin-chart">
+      {% for m in monthly_breakdown %}
+      {% set pct = ((m.net / max_net * 100) | round | int) if max_net > 0 else 0 %}
+      <div class="fin-bar">
+        <div class="fin-bar__track">
+          <div class="fin-bar__fill {% if m.net == 0 %}dim{% endif %}" style="height:{{ [pct, 2] | max }}%"></div>
+        </div>
+        <div class="fin-bar__val">{{ m.net | huf_k }}</div>
+        <div class="fin-bar__lbl">{{ m.label }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="color:var(--ink-4);font-family:var(--mono);font-size:12px">Nincs lezárt munka az elmúlt 6 hónapban.</p>
+    {% endif %}
+  </div>
+
+  <!-- Top projects -->
+  <div class="fin-card">
+    <div class="fin-card__title">Top projektek érték szerint</div>
+    {% if top_projects %}
+    {% for p in top_projects[:7] %}
+    <div class="fin-top-row">
+      <div>
+        <div class="fin-top-name">{{ p.client_name }}</div>
+        <div class="fin-top-sub">{{ p.job_type.value }} · {{ p.actual_end_date or '—' }}</div>
+      </div>
+      <div class="fin-top-val">{{ p.total_net | huf }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--ink-4);font-family:var(--mono);font-size:12px">Nincs lezárt munka.</p>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Row 2: by distributor + by crew -->
+<div class="fin-grid">
+
+  <div class="fin-card">
+    <div class="fin-card__title">Forgalmazónként</div>
+    {% if dist_stats %}
+    {% for name, ds in dist_stats %}
+    {% set pct = ((ds.net / dist_max * 100) | round | int) if dist_max > 0 else 0 %}
+    <div class="fin-hbar">
+      <div class="fin-hbar__name">{{ name }}</div>
+      <div class="fin-hbar__track"><div class="fin-hbar__fill" style="width:{{ pct }}%"></div></div>
+      <div class="fin-hbar__val">{{ ds.net | huf_k }}</div>
+      <div class="fin-hbar__count">{{ ds.count }}×</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--ink-4);font-family:var(--mono);font-size:12px">Nincs adat.</p>
+    {% endif %}
+  </div>
+
+  <div class="fin-card">
+    <div class="fin-card__title">Csapatonként</div>
+    {% if crew_stats %}
+    {% for name, cs in crew_stats %}
+    {% set pct = ((cs.net / crew_max * 100) | round | int) if crew_max > 0 else 0 %}
+    <div class="fin-hbar">
+      <div class="fin-hbar__name">{{ name }}</div>
+      <div class="fin-hbar__track"><div class="fin-hbar__fill" style="width:{{ pct }}%"></div></div>
+      <div class="fin-hbar__val">{{ cs.net | huf_k }}</div>
+      <div class="fin-hbar__count">{{ cs.count }}×</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p style="color:var(--ink-4);font-family:var(--mono);font-size:12px">Nincs adat.</p>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}

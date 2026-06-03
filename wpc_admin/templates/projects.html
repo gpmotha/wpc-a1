@@ -9,21 +9,24 @@
 <div class="stage__head">
   <div class="stage__kicker">01 · Munkák</div>
   <h1 class="stage__title">Aktív projektek</h1>
-  <p class="stage__lead">Összes munka, szűrés státusz és csapat szerint.</p>
+  <p class="stage__lead">Pipeline áttekintés — státusz szerint csoportosítva.</p>
 </div>
 
 <div class="stat-strip">
   <div class="stat-cell">
-    <div class="l">Összes projekt</div>
-    <div class="v">{{ stats.total }}</div>
-  </div>
-  <div class="stat-cell">
     <div class="l">Folyamatban</div>
     <div class="v">{{ stats.folyamatban }}</div>
+    <div class="d">aktív munka</div>
   </div>
   <div class="stat-cell">
     <div class="l">Betervezve</div>
     <div class="v">{{ stats.betervezve }}</div>
+    <div class="d">ütemezett</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Pipeline értéke</div>
+    <div class="v">{{ stats.pipeline_value | huf }}</div>
+    <div class="d">folyamatban + betervezve</div>
   </div>
   <div class="stat-cell">
     <div class="l">Havi bevétel nettó</div>
@@ -32,30 +35,8 @@
   </div>
 </div>
 
-<div class="filter-bar">
-  <span class="filter-label">Szűrő</span>
-  {% for val, label in [
-    ("", "Mind"),
-    ("felmérendő", "Felmérendő"),
-    ("lebeszélve", "Lebeszélve"),
-    ("betervezve", "Betervezve"),
-    ("folyamatban", "Folyamatban"),
-    ("kész", "Kész")
-  ] %}
-  <button
-    class="filter-btn {% if status_filter == val %}active{% endif %}"
-    hx-get="/"
-    hx-target="#project-table"
-    hx-swap="innerHTML"
-    hx-vals='{"status_filter": "{{ val }}"}'
-    hx-include="[name='q']"
-    onclick="document.getElementById('sf').value='{{ val }}'; document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active')); this.classList.add('active')"
-  >{{ label }}</button>
-  {% endfor %}
-
-  <input type="hidden" name="status_filter" id="sf" value="{{ status_filter }}">
-
-  <div class="filter-search">
+<div class="filter-bar" style="margin-bottom: 16px">
+  <div class="filter-search" style="margin-left:0">
     <svg viewBox="0 0 20 20" style="width:14px;height:14px;stroke:var(--ink-4);fill:none;stroke-width:1.7;flex-shrink:0">
       <circle cx="8.5" cy="8.5" r="5"/><path d="M13 13l3.5 3.5"/>
     </svg>
@@ -64,23 +45,137 @@
       name="q"
       id="qInput"
       value="{{ q }}"
-      placeholder="Keresés…"
+      placeholder="Keresés név vagy cím alapján…"
       hx-get="/"
-      hx-target="#project-table"
+      hx-target="#project-board"
       hx-swap="innerHTML"
       hx-trigger="keyup changed delay:300ms"
-      hx-include="[name='status_filter']"
+      style="width: 260px"
     >
+  </div>
+
+  <div class="view-toggle" style="margin-left:auto">
+    <button class="view-btn" id="btnKanban" data-view="kanban" onclick="setView('kanban')" title="Kanban nézet">
+      <svg viewBox="0 0 16 16"><rect x="1" y="1" width="4" height="11" rx="1"/><rect x="6" y="1" width="4" height="7" rx="1"/><rect x="11" y="1" width="4" height="9" rx="1"/></svg>
+    </button>
+    <button class="view-btn" id="btnTable" data-view="table" onclick="setView('table')" title="Táblázat nézet">
+      <svg viewBox="0 0 16 16"><rect x="1" y="1" width="14" height="3" rx="1"/><rect x="1" y="6" width="14" height="2" rx="1"/><rect x="1" y="10" width="14" height="2" rx="1"/><rect x="1" y="14" width="14" height="1" rx="1"/></svg>
+    </button>
   </div>
 </div>
 
-<div id="project-table">
+<div class="slicer-bar" id="slicerBar">
+  <span class="slicer-label">Státusz</span>
+  {% for val, label in [
+    ("felmérendő","Felmérendő"),("lebeszélve","Lebeszélve"),
+    ("betervezve","Betervezve"),("folyamatban","Folyamatban"),("kész","Kész")
+  ] %}
+  <button class="slicer-btn slicer-status active" data-val="{{ val }}" onclick="toggleSlicer(this)">{{ label }}</button>
+  {% endfor %}
+
+  <div class="slicer-sep"></div>
+  <span class="slicer-label">Csapat</span>
+  {% for val, label in [
+    ("Laci","Laci"),("Jenő","Jenő"),("Csaba","Csaba"),
+    ("Dani","Dani"),("Alex","Alex"),("Nincs hozzárendelve","—")
+  ] %}
+  <button class="slicer-btn slicer-crew active" data-val="{{ val }}" onclick="toggleSlicer(this)">{{ label }}</button>
+  {% endfor %}
+
+  <button class="slicer-reset" onclick="resetSlicers()">Szűrők törlése</button>
+</div>
+
+<div id="project-board">
   {% include "project_table.html" %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
+/* ── View toggle ── */
+function setView(v) {
+  const board = document.getElementById('project-board');
+  board.className = 'show-' + v;
+  document.getElementById('btnKanban').classList.toggle('active', v === 'kanban');
+  document.getElementById('btnTable').classList.toggle('active', v === 'table');
+  localStorage.setItem('wpc-proj-view', v);
+}
+
+/* ── Kész column toggle ── */
+function toggleKesz(headEl) {
+  const col = headEl.closest('.kanban-col');
+  const expanded = col.classList.toggle('collapsed') === false;
+  localStorage.setItem('wpc-kesz-expanded', expanded ? '1' : '');
+}
+
+function applyKeszState() {
+  const col = document.getElementById('kcol-kész');
+  if (!col) return;
+  const expanded = localStorage.getItem('wpc-kesz-expanded') === '1';
+  col.classList.toggle('collapsed', !expanded);
+}
+
+/* ── Slicer filtering ── */
+function toggleSlicer(btn) {
+  btn.classList.toggle('active');
+  applySlicerFilter();
+}
+
+function resetSlicers() {
+  document.querySelectorAll('.slicer-btn').forEach(b => b.classList.add('active'));
+  applySlicerFilter();
+}
+
+function applySlicerFilter() {
+  const allStatus = document.querySelectorAll('.slicer-status');
+  const allCrew   = document.querySelectorAll('.slicer-crew');
+  const activeStatuses = new Set([...allStatus].filter(b => b.classList.contains('active')).map(b => b.dataset.val));
+  const activeCrews    = new Set([...allCrew].filter(b => b.classList.contains('active')).map(b => b.dataset.val));
+  const statusFiltered = activeStatuses.size < allStatus.length;
+  const crewFiltered   = activeCrews.size < allCrew.length;
+
+  /* table rows */
+  document.querySelectorAll('.view-table tbody tr[data-status]').forEach(row => {
+    const ok = (!statusFiltered || activeStatuses.has(row.dataset.status))
+            && (!crewFiltered   || activeCrews.has(row.dataset.crew));
+    row.style.display = ok ? '' : 'none';
+  });
+
+  /* kanban: hide columns by status */
+  document.querySelectorAll('.kanban-col[data-status]').forEach(col => {
+    const hidden = statusFiltered && !activeStatuses.has(col.dataset.status);
+    col.style.display = hidden ? 'none' : '';
+  });
+
+  /* kanban: hide cards by crew */
+  document.querySelectorAll('.proj-card[data-crew]').forEach(card => {
+    card.style.display = (!crewFiltered || activeCrews.has(card.dataset.crew)) ? '' : 'none';
+  });
+
+  /* show/hide reset button */
+  document.getElementById('slicerBar').classList.toggle('has-filter', statusFiltered || crewFiltered);
+}
+
+/* ── After HTMX search swap: restore all state ── */
+document.body.addEventListener('htmx:afterSwap', function(e) {
+  if (e.target.id === 'project-board') {
+    setView(localStorage.getItem('wpc-proj-view') || 'kanban');
+    applyKeszState();
+    applySlicerFilter();
+  }
+});
+
+/* ── Init ── */
+setView(localStorage.getItem('wpc-proj-view') || 'kanban');
+applyKeszState();
+applySlicerFilter();
+
+/* ── Selection ── */
+function selectCard(el) {
+  document.querySelectorAll('.proj-card.selected').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
 function highlightRow(tr) {
   document.querySelectorAll('tbody tr.selected').forEach(r => r.classList.remove('selected'));
   tr.classList.add('selected');

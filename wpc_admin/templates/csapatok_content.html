@@ -1,0 +1,163 @@
+{% set sc = {
+  "felmérendő": "s-felmerendo", "lebeszélve": "s-lebeszélve",
+  "betervezve": "s-betervezve", "folyamatban": "s-folyamatban",
+  "kész": "s-kesz", "törölt": "s-torolt"
+} %}
+
+<p class="stage__lead" style="margin-bottom:16px">{{ period_label }}</p>
+
+<!-- Stat strip -->
+<div class="stat-strip">
+  <div class="stat-cell">
+    <div class="l">Csapat kapacitás</div>
+    <div class="v">{{ summary.crew_count }} fő</div>
+    <div class="d">{{ summary.workdays_per_crew }} munkanap/fő</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Kihasználtság</div>
+    <div class="v" style="color:{% if summary.overall_util_pct > 75 %}var(--moss){% elif summary.overall_util_pct > 40 %}var(--amber){% else %}var(--red){% endif %}">{{ summary.overall_util_pct }}%</div>
+    <div class="d">{{ summary.total_munka }} munkanap rögzítve</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Szabadság</div>
+    <div class="v" style="color:var(--moss)">{{ summary.total_szabi }}</div>
+    <div class="d">nap összesen</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Eső / szél</div>
+    <div class="v" style="color:var(--amber)">{{ summary.total_eso }}</div>
+    <div class="d">időjárás miatt kiesett</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Beteg napok</div>
+    <div class="v" style="color:var(--purple)">{{ summary.total_beteg }}</div>
+    <div class="d">nap összesen</div>
+  </div>
+</div>
+
+<!-- Crew cards -->
+<div class="crew-grid">
+  {% for c in crews %}
+  <div class="crew-card">
+    <div class="crew-card-head">
+      <div class="crew-avatar-lg" style="background:var(--crew-{{ c.css_key }})">{{ c.name[0] }}</div>
+      <div>
+        <div class="crew-card-name">{{ c.name }}</div>
+        <div class="crew-card-sub">{{ c.jobs | length }} aktív munka · {{ c.total_rev | huf }}</div>
+      </div>
+    </div>
+    <div class="crew-card-body">
+      <div class="util-bar-label">
+        <span>Kihasználtság</span>
+        <span style="color:{% if c.util_pct > 75 %}var(--moss){% elif c.util_pct > 40 %}var(--amber){% else %}var(--red){% endif %};font-weight:500">{{ c.util_pct }}%</span>
+      </div>
+      <div class="util-bar-track">
+        <div class="util-seg" style="width:{{ c.pct_munka }}%;background:var(--sky)" title="Munka: {{ c.n_munka }} nap"></div>
+        <div class="util-seg" style="width:{{ c.pct_szabi }}%;background:var(--moss)" title="Szabadság: {{ c.n_szabi }} nap"></div>
+        <div class="util-seg" style="width:{{ c.pct_eso }}%;background:var(--amber)" title="Eső/szél: {{ c.n_eso }} nap"></div>
+        <div class="util-seg" style="width:{{ c.pct_beteg }}%;background:var(--purple)" title="Beteg: {{ c.n_beteg }} nap"></div>
+        <div class="util-seg" style="width:{{ c.pct_msz }}%;background:var(--red)" title="Munkaszünet: {{ c.n_munkaszunet }} nap"></div>
+      </div>
+      <div class="util-dots">
+        {% if c.n_munka %}<span class="util-dot"><span class="util-dot-mark" style="background:var(--sky)"></span>{{ c.n_munka }} munka</span>{% endif %}
+        {% if c.n_szabi %}<span class="util-dot"><span class="util-dot-mark" style="background:var(--moss)"></span>{{ c.n_szabi }} szabi</span>{% endif %}
+        {% if c.n_eso %}<span class="util-dot"><span class="util-dot-mark" style="background:var(--amber)"></span>{{ c.n_eso }} eső</span>{% endif %}
+        {% if c.n_beteg %}<span class="util-dot"><span class="util-dot-mark" style="background:var(--purple)"></span>{{ c.n_beteg }} beteg</span>{% endif %}
+        {% if c.n_munkaszunet %}<span class="util-dot"><span class="util-dot-mark" style="background:var(--red)"></span>{{ c.n_munkaszunet }} munkaszünet</span>{% endif %}
+        {% if not c.n_munka and not c.n_szabi and not c.n_eso and not c.n_beteg and not c.n_munkaszunet %}
+        <span class="util-dot" style="color:var(--ink-4)">Nincs rögzített nap ebben az időszakban</span>
+        {% endif %}
+      </div>
+      <div class="crew-metrics">
+        <div class="crew-metric"><div class="mv" style="color:var(--sky)">{{ c.n_munka }}</div><div class="ml">Munkanap</div></div>
+        <div class="crew-metric"><div class="mv" style="color:var(--moss)">{{ c.n_szabi }}</div><div class="ml">Szabadság</div></div>
+        <div class="crew-metric"><div class="mv" style="color:var(--amber)">{{ c.n_eso }}</div><div class="ml">Eső/szél</div></div>
+        <div class="crew-metric"><div class="mv">{{ c.workdays }}</div><div class="ml">Keret</div></div>
+      </div>
+      {% if c.jobs %}
+      <div class="crew-jobs">
+        {% for p in c.jobs %}
+        <div class="crew-job-chip"
+          hx-get="/projects/{{ p.id }}/detail"
+          hx-target="#detail-panel"
+          hx-swap="innerHTML"
+        >
+          <div class="cjc-dot" style="background:var(--crew-{{ c.css_key }})"></div>
+          <span class="cjc-name">{{ p.client_name }}</span>
+          <span class="cjc-days">{{ p.planned_work_days or '?' }} nap</span>
+          <span class="status {{ sc.get(p.status.value, '') }}" style="font-size:9px;padding:2px 6px">
+            <span class="status-dot"></span>{{ p.status.value }}
+          </span>
+        </div>
+        {% endfor %}
+        {% if c.jobs_extra > 0 %}
+        <div style="font-size:10px;color:var(--ink-3);padding:4px 10px;font-family:var(--mono)">+{{ c.jobs_extra }} további munka</div>
+        {% endif %}
+      </div>
+      {% else %}
+      <div style="font-size:11px;color:var(--ink-4);margin-top:10px;font-family:var(--mono)">Nincs aktív munka.</div>
+      {% endif %}
+      {% if c.horizon_days > 0 %}
+      <div class="horizon-note">⊞ {{ c.horizon_days }} ütemezett munkanap a következő 90 napban</div>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Jobs table -->
+<div class="sec-label" style="margin-bottom:12px">Munkák csapatonként</div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Csapat</th>
+        <th>Megrendelő</th>
+        <th>Státusz</th>
+        <th>Típus</th>
+        <th>Terv. napok</th>
+        <th>Forgalmazó</th>
+        <th>Munkadíj</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if all_crew_jobs %}
+      {% for crew_name, css_key, p in all_crew_jobs %}
+      <tr
+        hx-get="/projects/{{ p.id }}/detail"
+        hx-target="#detail-panel"
+        hx-swap="innerHTML"
+        style="cursor:pointer"
+      >
+        <td>
+          <span style="display:inline-flex;align-items:center;gap:6px;font-weight:500">
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--crew-{{ css_key }});display:inline-block;flex-shrink:0"></span>
+            {{ crew_name }}
+          </span>
+        </td>
+        <td>
+          <div class="td-name">{{ p.client_name }}</div>
+          {% set addr = ((p.iranyitoszam or '') ~ ' ' ~ (p.varos or '')) | trim if p.varos else (p.address or '') %}
+          {% if addr %}<div class="td-sub">{{ addr }}</div>{% endif %}
+        </td>
+        <td>
+          <span class="status {{ sc.get(p.status.value, '') }}">
+            <span class="status-dot"></span>{{ p.status.value }}
+          </span>
+        </td>
+        <td style="font-size:12px;color:var(--ink-2)">{{ p.job_type.value }}</td>
+        <td style="font-size:12px;color:var(--ink-2);font-family:var(--mono)">{{ p.planned_work_days or '—' }}</td>
+        <td style="font-size:12px;color:var(--ink-2)">{{ p.distributor.value }}</td>
+        <td style="font-family:var(--mono);font-weight:500">{{ (p.cost.labor_fee if p.cost else 0) | huf }}</td>
+      </tr>
+      {% endfor %}
+      {% else %}
+      <tr>
+        <td colspan="7" style="text-align:center;color:var(--ink-4);padding:24px;font-size:12px;font-family:var(--mono)">
+          Nincs aktív munka.
+        </td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>

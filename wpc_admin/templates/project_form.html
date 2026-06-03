@@ -13,69 +13,91 @@
 
 <form method="post" action="{% if p %}/projects/{{ p.id }}/edit{% else %}/projects/new{% endif %}" class="form-page">
 
-  <!-- 1. Ügyfél adatok -->
-  <div class="form-section">
-    <div class="form-section-title">Ügyfél adatok</div>
-    <div class="form-row">
-      <div class="field">
-        <label>Megrendelő neve <em>*</em></label>
-        <input type="text" name="client_name" value="{{ p.client_name if p else '' }}" required>
+  <!-- Tab navigation -->
+  <div class="form-tabs">
+    <button type="button" class="form-tab active" data-tab="ugyfel">Ügyfél</button>
+    <button type="button" class="form-tab" data-tab="munka">Munka & Jelzők</button>
+    <button type="button" class="form-tab" data-tab="datumok">Dátumok</button>
+    <button type="button" class="form-tab" data-tab="dijak">Díjak</button>
+    <button type="button" class="form-tab" data-tab="logisztika">Logisztika</button>
+  </div>
+
+  <!-- ── Tab 1: Ügyfél adatok ── -->
+  <div class="form-tab-panel active" id="tab-ugyfel">
+    <div class="ugyfel-layout">
+
+      <!-- Left: form fields -->
+      <div class="ugyfel-fields">
+        <div class="form-section-title">Ügyfél adatok</div>
+        <div class="form-row">
+          <div class="field">
+            <label>Megrendelő neve <em>*</em></label>
+            <input type="text" name="client_name" value="{{ p.client_name if p else '' }}" required>
+          </div>
+          <div class="field">
+            <label>Telefon</label>
+            <input type="text" name="phone" value="{{ p.phone if p and p.phone else '' }}">
+          </div>
+        </div>
+        <div class="form-row" style="grid-template-columns:100px 1fr 1fr 1fr">
+          <div class="field">
+            <label>Irányítószám</label>
+            <input type="text" name="iranyitoszam" maxlength="4" value="{{ p.iranyitoszam if p and p.iranyitoszam else '' }}" placeholder="1072" class="geocode-trigger">
+          </div>
+          <div class="field">
+            <label>Város</label>
+            <input type="text" name="varos" value="{{ p.varos if p and p.varos else '' }}" placeholder="Budapest" class="geocode-trigger">
+          </div>
+          <div class="field">
+            <label>Utca</label>
+            <input type="text" name="utca" value="{{ p.utca if p and p.utca else '' }}" placeholder="Síp utca" class="geocode-trigger">
+          </div>
+          <div class="field">
+            <label>Házszám</label>
+            <input type="text" name="hazszam" value="{{ p.hazszam if p and p.hazszam else '' }}" placeholder="18" class="geocode-trigger">
+          </div>
+        </div>
+        <div class="form-row c1">
+          <div class="field">
+            <label>Egyéb (em./ajtó — csak megjelenítéshez)</label>
+            <input type="text" name="egyeb" value="{{ p.egyeb if p and p.egyeb else '' }}" placeholder="2. em. 4. ajtó">
+          </div>
+        </div>
+        <div class="form-row c1">
+          <div class="field">
+            <label>Teljes cím (régi mező — megmarad a meglévő adatoknál)</label>
+            <input type="text" name="address" value="{{ p.address if p and p.address else '' }}" placeholder="Régi, szabad formátumú cím">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="field">
+            <label>Email</label>
+            <input type="email" name="email" value="{{ p.email if p and p.email else '' }}">
+          </div>
+          <div class="field">
+            <label>Számla típusa</label>
+            <select name="invoice_type" required>
+              {% if not p %}<option value="" disabled selected>— válassz —</option>{% endif %}
+              {% for opt in InvoiceType %}
+              <option value="{{ opt.value }}"{% if p and p.invoice_type == opt %} selected{% endif %}>{{ opt.value }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
       </div>
-      <div class="field">
-        <label>Telefon</label>
-        <input type="text" name="phone" value="{{ p.phone if p and p.phone else '' }}">
+
+      <!-- Right: mini map -->
+      <div class="ugyfel-map-wrap">
+        <div class="ugyfel-map-label">Helyszín</div>
+        <div id="formMap"></div>
+        <div class="map-geocode-hint" id="geocodeHint">Cím megadásával automatikusan jelenik meg</div>
       </div>
-    </div>
-    <!-- Structured address for geocoding -->
-    <div class="form-row" style="grid-template-columns:100px 1fr 1fr 1fr">
-      <div class="field">
-        <label>Irányítószám</label>
-        <input type="text" name="iranyitoszam" maxlength="4" value="{{ p.iranyitoszam if p and p.iranyitoszam else '' }}" placeholder="1072">
-      </div>
-      <div class="field">
-        <label>Város</label>
-        <input type="text" name="varos" value="{{ p.varos if p and p.varos else '' }}" placeholder="Budapest">
-      </div>
-      <div class="field">
-        <label>Utca</label>
-        <input type="text" name="utca" value="{{ p.utca if p and p.utca else '' }}" placeholder="Síp utca">
-      </div>
-      <div class="field">
-        <label>Házszám</label>
-        <input type="text" name="hazszam" value="{{ p.hazszam if p and p.hazszam else '' }}" placeholder="18">
-      </div>
-    </div>
-    <div class="form-row c1">
-      <div class="field">
-        <label>Egyéb (em./ajtó — csak megjelenítéshez)</label>
-        <input type="text" name="egyeb" value="{{ p.egyeb if p and p.egyeb else '' }}" placeholder="2. em. 4. ajtó">
-      </div>
-    </div>
-    <div class="form-row c1">
-      <div class="field">
-        <label>Teljes cím (régi mező — megmarad a meglévő adatoknál)</label>
-        <input type="text" name="address" value="{{ p.address if p and p.address else '' }}" placeholder="Régi, szabad formátumú cím">
-      </div>
-    </div>
-    <div class="form-row">
-      <div class="field">
-        <label>Email</label>
-        <input type="email" name="email" value="{{ p.email if p and p.email else '' }}">
-      </div>
-      <div class="field">
-        <label>Számla típusa</label>
-        <select name="invoice_type" required>
-          {% if not p %}<option value="" disabled selected>— válassz —</option>{% endif %}
-          {% for opt in InvoiceType %}
-          <option value="{{ opt.value }}"{% if p and p.invoice_type == opt %} selected{% endif %}>{{ opt.value }}</option>
-          {% endfor %}
-        </select>
-      </div>
+
     </div>
   </div>
 
-  <!-- 2. Munka adatok -->
-  <div class="form-section">
+  <!-- ── Tab 2: Munka adatok + Jelzők ── -->
+  <div class="form-tab-panel" id="tab-munka">
     <div class="form-section-title">Munka adatok</div>
     <div class="form-row">
       <div class="field">
@@ -142,11 +164,8 @@
         </select>
       </div>
     </div>
-  </div>
 
-  <!-- 3. Jelzők -->
-  <div class="form-section">
-    <div class="form-section-title">Jelzők</div>
+    <div class="form-section-title" style="margin-top:24px">Jelzők</div>
     <div class="check-row">
       <label class="check-item">
         <input type="checkbox" name="crew_confirmed"{% if p and p.crew_confirmed %} checked{% endif %}>
@@ -167,8 +186,8 @@
     </div>
   </div>
 
-  <!-- 4. Dátumok -->
-  <div class="form-section">
+  <!-- ── Tab 3: Dátumok ── -->
+  <div class="form-tab-panel" id="tab-datumok">
     <div class="form-section-title">Dátumok</div>
     <div class="form-row c3">
       <div class="field">
@@ -200,8 +219,8 @@
     </div>
   </div>
 
-  <!-- 5. Díjak -->
-  <div class="form-section">
+  <!-- ── Tab 4: Díjak ── -->
+  <div class="form-tab-panel" id="tab-dijak">
     <div class="form-section-title">Díjak (nettó Ft)</div>
     <div class="form-row">
       <div class="field">
@@ -226,8 +245,8 @@
     <div class="hint">Csak szám, Ft jel nélkül</div>
   </div>
 
-  <!-- 6. Logisztika & Megjegyzések -->
-  <div class="form-section">
+  <!-- ── Tab 5: Logisztika ── -->
+  <div class="form-tab-panel" id="tab-logisztika">
     <div class="form-section-title">Logisztika &amp; Megjegyzések</div>
     <div class="form-row">
       <div class="field">
@@ -278,4 +297,81 @@
   </div>
 
 </form>
+{% endblock %}
+
+{% block extra_js %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<script>
+/* ── Tab switching ── */
+document.querySelectorAll('.form-tab').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const tab = this.dataset.tab;
+    document.querySelectorAll('.form-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.form-tab-panel').forEach(p => p.classList.remove('active'));
+    this.classList.add('active');
+    document.getElementById('tab-' + tab).classList.add('active');
+    if (tab === 'ugyfel') setTimeout(() => formMap && formMap.invalidateSize(), 50);
+  });
+});
+
+/* ── Mini map ── */
+const _initLat = {{ p.lat if p and p.lat else 47.4979 }};
+const _initLng = {{ p.lng if p and p.lng else 19.0402 }};
+const _hasCoords = {{ 'true' if p and p.lat else 'false' }};
+
+const formMap = L.map('formMap', { zoomControl: true }).setView([_initLat, _initLng], _hasCoords ? 14 : 9);
+
+L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OSM &copy; CARTO', maxZoom: 19
+}).addTo(formMap);
+
+let formMarker = null;
+if (_hasCoords) {
+  formMarker = L.marker([_initLat, _initLng]).addTo(formMap);
+  document.getElementById('geocodeHint').textContent = 'Koordináta betöltve';
+  document.getElementById('geocodeHint').classList.add('found');
+}
+
+/* ── Auto-geocode on address change ── */
+let _gcTimer = null;
+const _hint = document.getElementById('geocodeHint');
+
+function scheduleGeocode() {
+  clearTimeout(_gcTimer);
+  _gcTimer = setTimeout(runGeocode, 900);
+  _hint.textContent = 'Geocódolás…';
+  _hint.className = 'map-geocode-hint searching';
+}
+
+async function runGeocode() {
+  const iz  = document.querySelector('[name=iranyitoszam]').value.trim();
+  const var_ = document.querySelector('[name=varos]').value.trim();
+  const utca = document.querySelector('[name=utca]').value.trim();
+  const hz   = document.querySelector('[name=hazszam]').value.trim();
+  const q    = [iz, var_, utca, hz].filter(Boolean).join(' ');
+  if (!q) { _hint.textContent = 'Cím megadásával automatikusan jelenik meg'; _hint.className = 'map-geocode-hint'; return; }
+
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q + ', Magyarország')}&limit=1`;
+    const data = await fetch(url, { headers: { 'Accept-Language': 'hu' } }).then(r => r.json());
+    if (data.length > 0) {
+      const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
+      formMap.setView([lat, lng], 15);
+      if (formMarker) formMarker.setLatLng([lat, lng]);
+      else formMarker = L.marker([lat, lng]).addTo(formMap);
+      _hint.textContent = 'Cím megtalálva: ' + data[0].display_name.split(',').slice(0,3).join(',');
+      _hint.className = 'map-geocode-hint found';
+    } else {
+      _hint.textContent = 'Cím nem található';
+      _hint.className = 'map-geocode-hint';
+    }
+  } catch(e) {
+    _hint.textContent = 'Geocódolási hiba';
+    _hint.className = 'map-geocode-hint';
+  }
+}
+
+document.querySelectorAll('.geocode-trigger').forEach(el => el.addEventListener('input', scheduleGeocode));
+</script>
 {% endblock %}

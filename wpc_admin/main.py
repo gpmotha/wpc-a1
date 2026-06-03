@@ -1,8 +1,15 @@
+import logging
+import logging.handlers
+import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
+from io import BytesIO
+from pathlib import Path
+
+import openpyxl
 
 from fastapi import BackgroundTasks, Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, SQLModel, select
@@ -13,6 +20,36 @@ from models import (
     Crew, Distributor, InvoiceType, JobType, Priority,
     Project, ProjectCost, ProjectLogistics, ProjectStatus,
 )
+
+
+# ── Logging setup ─────────────────────────────────────────────────────────────
+
+_LOG_DIR = Path(__file__).parent / "logs"
+_LOG_DIR.mkdir(exist_ok=True)
+
+_fmt = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_fmt)
+
+_file_handler = logging.handlers.RotatingFileHandler(
+    _LOG_DIR / "wpc_admin.log",
+    maxBytes=5 * 1024 * 1024,  # 5 MB
+    backupCount=3,
+    encoding="utf-8",
+)
+_file_handler.setFormatter(_fmt)
+
+logging.basicConfig(level=logging.INFO, handlers=[_console_handler, _file_handler])
+
+# Quieten noisy libraries
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+logger = logging.getLogger("wpc_admin")
 
 
 def seed_projects(session: Session) -> None:
@@ -189,15 +226,36 @@ def seed_projects(session: Session) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    logger.info("WPC Admin starting up")
     create_tables()
     with Session(engine) as session:
         seed_projects(session)
+    logger.info("WPC Admin ready")
     yield
+    logger.info("WPC Admin shutting down")
 
 
 app = FastAPI(title="WPC Projekt Adminisztrátor", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
+app.mount("/icons", StaticFiles(directory="icons"), name="icons")
 templates = Jinja2Templates(directory="templates")
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - start) * 1000
+    # Skip static assets to avoid noise
+    if not request.url.path.startswith("/static"):
+        logger.info(
+            "%s %s %s %.0fms",
+            request.method,
+            request.url.path,
+            response.status_code,
+            duration_ms,
+        )
+    return response
 
 
 def _fmt_huf(n) -> str:
@@ -209,6 +267,21 @@ def _fmt_huf(n) -> str:
 templates.env.filters["huf"] = _fmt_huf
 
 
+def _fmt_huf_k(n) -> str:
+    """Abbreviated: 1_200_000 → '1.2M', 480_000 → '480e'"""
+    if not n:
+        return "0"
+    if n >= 1_000_000:
+        v = n / 1_000_000
+        return f"{v:.1f}M" if n % 1_000_000 else f"{int(v)}M"
+    if n >= 1_000:
+        return f"{n // 1_000}e"
+    return str(int(n))
+
+
+templates.env.filters["huf_k"] = _fmt_huf_k
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "app": "WPC Projekt Adminisztrátor"}
@@ -218,23 +291,26 @@ def health():
 def index(
     request: Request,
     q: str = "",
-    status_filter: str = "",
     session: Session = Depends(get_session),
 ):
+    from collections import defaultdict
+
     all_projects = list(
         session.exec(select(Project).where(Project.status != ProjectStatus.torolt)).all()
     )
 
     today = date.today()
     stats = {
-        "total": len(all_projects),
         "folyamatban": sum(1 for p in all_projects if p.status == ProjectStatus.folyamatban),
         "betervezve": sum(1 for p in all_projects if p.status == ProjectStatus.betervezve),
+        "pipeline_value": sum(
+            p.total_net for p in all_projects
+            if p.status in (ProjectStatus.betervezve, ProjectStatus.folyamatban)
+        ),
         "havi_bevetel": sum(
-            p.cost.labor_fee
+            p.total_net
             for p in all_projects
             if p.status == ProjectStatus.kesz
-            and p.cost
             and p.actual_end_date
             and p.actual_end_date.year == today.year
             and p.actual_end_date.month == today.month
@@ -242,23 +318,30 @@ def index(
     }
 
     filtered = all_projects
-    if status_filter:
-        filtered = [p for p in filtered if p.status.value == status_filter]
     if q:
         q_l = q.lower()
         filtered = [
             p for p in filtered
-            if q_l in (p.client_name or "").lower() or q_l in (p.address or "").lower()
+            if q_l in (p.client_name or "").lower()
+            or q_l in (p.address or "").lower()
+            or q_l in (p.varos or "").lower()
         ]
+
+    projects_by_status: dict = defaultdict(list)
+    sums_by_status: dict = defaultdict(int)
+    for p in filtered:
+        projects_by_status[p.status.value].append(p)
+        sums_by_status[p.status.value] += p.total_net
 
     ctx = {
         "request": request,
         "module": "admin",
         "active_page": "projects",
         "projects": filtered,
+        "projects_by_status": dict(projects_by_status),
+        "sums_by_status": dict(sums_by_status),
         "stats": stats,
         "q": q,
-        "status_filter": status_filter,
     }
 
     if request.headers.get("HX-Request"):
@@ -377,6 +460,7 @@ async def project_new_submit(
     if any(v for v in logistics_data.values()):
         session.add(ProjectLogistics(project_id=p.id, **logistics_data))
     session.commit()
+    logger.info("Project created: id=%s client=%r status=%s", p.id, p.client_name, p.status.value)
     if _needs_geocode(p):
         background_tasks.add_task(_geocode_project_by_id, p.id)
     return RedirectResponse("/", status_code=303)
@@ -439,6 +523,7 @@ async def project_edit_submit(
         p.geocode_ok = 0
     session.add(p)
     session.commit()
+    logger.info("Project updated: id=%s client=%r status=%s", p.id, p.client_name, p.status.value)
     if _needs_geocode(p):
         background_tasks.add_task(_geocode_project_by_id, p.id)
     return RedirectResponse("/", status_code=303)
@@ -471,7 +556,91 @@ def project_delete_submit(
         p.status = ProjectStatus.torolt
         session.add(p)
         session.commit()
+        logger.info("Project soft-deleted: id=%s client=%r", project_id, p.client_name)
+    else:
+        logger.warning("Delete attempted on missing project: id=%s", project_id)
     return RedirectResponse("/", status_code=303)
+
+
+# ── Finance page ─────────────────────────────────────────────────────────────
+
+_MONTH_LABELS = ["Jan", "Feb", "Már", "Ápr", "Máj", "Jún", "Júl", "Aug", "Szep", "Okt", "Nov", "Dec"]
+
+
+def _prev_months(today: date, n: int) -> list[tuple[int, int]]:
+    months = []
+    y, m = today.year, today.month
+    for _ in range(n):
+        months.insert(0, (y, m))
+        m -= 1
+        if m == 0:
+            m, y = 12, y - 1
+    return months
+
+
+@app.get("/finance", response_class=HTMLResponse)
+def finance_view(request: Request, session: Session = Depends(get_session)):
+    from collections import defaultdict
+
+    all_projects = list(session.exec(select(Project)).all())
+    today = date.today()
+
+    done = [p for p in all_projects if p.status == ProjectStatus.kesz]
+    pipeline = [p for p in all_projects if p.status in (ProjectStatus.betervezve, ProjectStatus.folyamatban)]
+
+    this_month_done = [
+        p for p in done
+        if p.actual_end_date
+        and p.actual_end_date.year == today.year
+        and p.actual_end_date.month == today.month
+    ]
+    ytd_done = [p for p in done if p.actual_end_date and p.actual_end_date.year == today.year]
+
+    stats = {
+        "monthly_net": sum(p.total_net for p in this_month_done),
+        "monthly_count": len(this_month_done),
+        "ytd_net": sum(p.total_net for p in ytd_done),
+        "ytd_count": len(ytd_done),
+        "pipeline_value": sum(p.total_net for p in pipeline),
+        "pipeline_count": len(pipeline),
+        "total_all_time": sum(p.total_net for p in done),
+    }
+
+    monthly_breakdown = []
+    for y, m in _prev_months(today, 6):
+        month_done = [p for p in done if p.actual_end_date and p.actual_end_date.year == y and p.actual_end_date.month == m]
+        monthly_breakdown.append({
+            "year": y, "month": m,
+            "label": _MONTH_LABELS[m - 1],
+            "count": len(month_done),
+            "net": sum(p.total_net for p in month_done),
+        })
+
+    dist_agg: dict = defaultdict(lambda: {"count": 0, "net": 0})
+    crew_agg: dict = defaultdict(lambda: {"count": 0, "net": 0})
+    for p in done:
+        dist_agg[p.distributor.value]["count"] += 1
+        dist_agg[p.distributor.value]["net"] += p.total_net
+        crew_agg[p.crew.value]["count"] += 1
+        crew_agg[p.crew.value]["net"] += p.total_net
+
+    dist_stats = sorted(dist_agg.items(), key=lambda x: x[1]["net"], reverse=True)
+    crew_stats = sorted(crew_agg.items(), key=lambda x: x[1]["net"], reverse=True)
+
+    ctx = {
+        "request": request,
+        "module": "admin",
+        "active_page": "finance",
+        "today": today,
+        "stats": stats,
+        "monthly_breakdown": monthly_breakdown,
+        "dist_stats": dist_stats,
+        "crew_stats": crew_stats,
+        "dist_max": max((ds["net"] for _, ds in dist_stats), default=1) or 1,
+        "crew_max": max((cs["net"] for _, cs in crew_stats), default=1) or 1,
+        "top_projects": sorted(done, key=lambda p: p.total_net, reverse=True)[:8],
+    }
+    return templates.TemplateResponse("finance.html", ctx)
 
 
 # ── Map page ──────────────────────────────────────────────────────────────────
@@ -605,6 +774,7 @@ def _geocode_project_by_id(project_id: int) -> None:
             return
 
         url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(params)
+        _log = logging.getLogger("wpc_admin.geocoder")
         try:
             req = urllib.request.Request(url, headers={"User-Agent": "WPC-Admin/1.0"})
             with urllib.request.urlopen(req, timeout=10) as resp:
@@ -613,10 +783,13 @@ def _geocode_project_by_id(project_id: int) -> None:
                 p.lat = float(data[0]["lat"])
                 p.lng = float(data[0]["lon"])
                 p.geocode_ok = 1
+                _log.info("Geocoded project id=%s: (%.5f, %.5f)", project_id, p.lat, p.lng)
             else:
                 p.geocode_ok = -1
-        except Exception:
+                _log.warning("Geocode returned no results for project id=%s", project_id)
+        except Exception as exc:
             p.geocode_ok = -1
+            _log.error("Geocode failed for project id=%s: %s", project_id, exc)
 
         p.geocode_at = datetime.utcnow().isoformat()
         sess.add(p)
@@ -636,6 +809,7 @@ def _run_geocode_background() -> None:
     from database import engine as _engine
     from sqlmodel import Session as _Session, select as _select
 
+    _log = logging.getLogger("wpc_admin.geocoder")
     _geocode_state["running"] = True
     _geocode_state["processed"] = 0
     _geocode_state["errors"] = []
@@ -647,6 +821,7 @@ def _run_geocode_background() -> None:
             ).all()
         )
         _geocode_state["total"] = len(candidates)
+        _log.info("Bulk geocode started: %d candidates", len(candidates))
 
         for p in candidates:
             query: dict = {}
@@ -682,18 +857,27 @@ def _run_geocode_background() -> None:
                     p.lat = float(data[0]["lat"])
                     p.lng = float(data[0]["lon"])
                     p.geocode_ok = 1
+                    _log.info("Geocoded id=%s: (%.5f, %.5f)", p.id, p.lat, p.lng)
                 else:
                     p.geocode_ok = -1
-                    _geocode_state["errors"].append(p.address or f"id={p.id}")
+                    label = p.address or f"id={p.id}"
+                    _geocode_state["errors"].append(label)
+                    _log.warning("No geocode result for %s", label)
             except Exception as exc:
                 p.geocode_ok = -1
                 _geocode_state["errors"].append(str(exc))
+                _log.error("Geocode error for project id=%s: %s", p.id, exc)
             p.geocode_at = datetime.utcnow().isoformat()
             sess.add(p)
             sess.commit()
             _geocode_state["processed"] += 1
             time.sleep(1)
 
+    _log.info(
+        "Bulk geocode finished: %d processed, %d errors",
+        _geocode_state["processed"],
+        len(_geocode_state["errors"]),
+    )
     _geocode_state["running"] = False
 
 
@@ -794,6 +978,7 @@ def calendar_entry_upsert(
         session.add(existing)
         session.commit()
         session.refresh(existing)
+        logger.info("Calendar entry updated: id=%s date=%s crew=%s type=%s", existing.id, entry_date, crew.value, entry_type.value)
         return JSONResponse({"id": existing.id})
     else:
         entry = CalendarEntry(
@@ -806,6 +991,7 @@ def calendar_entry_upsert(
         session.add(entry)
         session.commit()
         session.refresh(entry)
+        logger.info("Calendar entry created: id=%s date=%s crew=%s type=%s", entry.id, entry_date, crew.value, entry_type.value)
         return JSONResponse({"id": entry.id})
 
 
@@ -818,6 +1004,7 @@ def calendar_entry_delete(
     if entry:
         session.delete(entry)
         session.commit()
+        logger.info("Calendar entry deleted: id=%s", entry_id)
     return JSONResponse({"deleted": entry_id})
 
 
@@ -838,3 +1025,201 @@ def projects_eligible(session: Session = Depends(get_session)):
         for p in projects
         if p.status in eligible_statuses
     ])
+
+
+# ── Csapatok (crew utilization) ───────────────────────────────────────────────
+
+_ACTIVE_CREWS = [Crew.laci, Crew.jeno, Crew.csaba, Crew.dani, Crew.alex]
+
+_CREW_CSS = {
+    Crew.laci:  "laci",
+    Crew.jeno:  "jeno",
+    Crew.csaba: "csaba",
+    Crew.dani:  "dani",
+    Crew.alex:  "alex",
+}
+
+
+def _workdays_in_range(start: date, end: date) -> int:
+    return sum(
+        1 for i in range((end - start).days + 1)
+        if (start + timedelta(days=i)).weekday() < 5
+    )
+
+
+def _get_period_range(period: str, today: date) -> tuple[date, date, str]:
+    import calendar as _cal
+    y = today.year
+    month_short = ["jan","feb","már","ápr","máj","jún","júl","aug","sze","okt","nov","dec"]
+    if period == "q1":
+        return date(y, 1, 1), date(y, 3, 31), f"Q1 · jan–már {y}"
+    elif period == "q2":
+        return date(y, 4, 1), date(y, 6, 30), f"Q2 · ápr–jún {y}"
+    elif period == "q3":
+        return date(y, 7, 1), date(y, 9, 30), f"Q3 · júl–sze {y}"
+    elif period == "q4":
+        return date(y, 10, 1), date(y, 12, 31), f"Q4 · okt–dec {y}"
+    elif period == "month":
+        last_day = _cal.monthrange(y, today.month)[1]
+        return date(y, today.month, 1), date(y, today.month, last_day), f"{month_short[today.month - 1]} {y}"
+    else:
+        return date(y, 1, 1), date(y, 12, 31), f"{y} teljes év"
+
+
+@app.get("/csapatok", response_class=HTMLResponse)
+def csapatok_view(
+    request: Request,
+    period: str = "all",
+    session: Session = Depends(get_session),
+):
+    today = date.today()
+    date_from, date_to, period_label = _get_period_range(period, today)
+
+    cal_entries = list(session.exec(
+        select(CalendarEntry).where(
+            CalendarEntry.date >= date_from,
+            CalendarEntry.date <= date_to,
+        )
+    ).all())
+
+    horizon_from = today + timedelta(days=1)
+    horizon_to = today + timedelta(days=90)
+    horizon_entries = list(session.exec(
+        select(CalendarEntry).where(
+            CalendarEntry.date >= horizon_from,
+            CalendarEntry.date <= horizon_to,
+            CalendarEntry.entry_type == CalendarEntryType.munka,
+        )
+    ).all())
+
+    all_projects = list(session.exec(select(Project)).all())
+    active_projects = [
+        p for p in all_projects
+        if p.status in (ProjectStatus.betervezve, ProjectStatus.folyamatban)
+    ]
+
+    workdays = _workdays_in_range(date_from, date_to)
+
+    crews_data = []
+    for crew in _ACTIVE_CREWS:
+        counts = {t.value: 0 for t in CalendarEntryType}
+        for e in cal_entries:
+            if e.crew == crew:
+                counts[e.entry_type.value] += 1
+
+        n_munka = counts["munka"]
+        n_szabi = counts["szabi"]
+        n_eso = counts["eso"] + counts["szel"]
+        n_beteg = counts["beteg"]
+        n_munkaszunet = counts["munkaszunet"]
+
+        util_pct = round(n_munka / workdays * 100) if workdays else 0
+        t = max(workdays, 1)
+
+        jobs = [p for p in active_projects if p.crew == crew]
+        total_rev = sum((p.cost.labor_fee if p.cost else 0) for p in jobs)
+        horizon_days = sum(1 for e in horizon_entries if e.crew == crew)
+
+        crews_data.append({
+            "name": crew.value,
+            "css_key": _CREW_CSS[crew],
+            "n_munka": n_munka,
+            "n_szabi": n_szabi,
+            "n_eso": n_eso,
+            "n_beteg": n_beteg,
+            "n_munkaszunet": n_munkaszunet,
+            "workdays": workdays,
+            "util_pct": util_pct,
+            "pct_munka": round(n_munka / t * 100, 1),
+            "pct_szabi": round(n_szabi / t * 100, 1),
+            "pct_eso":   round(n_eso   / t * 100, 1),
+            "pct_beteg": round(n_beteg / t * 100, 1),
+            "pct_msz":   round(n_munkaszunet / t * 100, 1),
+            "jobs": jobs[:5],
+            "jobs_extra": max(0, len(jobs) - 5),
+            "total_rev": total_rev,
+            "horizon_days": horizon_days,
+        })
+
+    total_munka = sum(c["n_munka"] for c in crews_data)
+    total_capacity = workdays * len(_ACTIVE_CREWS)
+    overall_util_pct = round(total_munka / total_capacity * 100) if total_capacity else 0
+
+    all_crew_jobs = [
+        (crew.value, _CREW_CSS[crew], p)
+        for crew in _ACTIVE_CREWS
+        for p in active_projects
+        if p.crew == crew
+    ]
+
+    ctx = {
+        "request": request,
+        "module": "admin",
+        "active_page": "csapatok",
+        "period": period,
+        "period_label": period_label,
+        "crews": crews_data,
+        "summary": {
+            "crew_count": len(_ACTIVE_CREWS),
+            "workdays_per_crew": workdays,
+            "overall_util_pct": overall_util_pct,
+            "total_munka": total_munka,
+            "total_szabi": sum(c["n_szabi"] for c in crews_data),
+            "total_eso": sum(c["n_eso"] for c in crews_data),
+            "total_beteg": sum(c["n_beteg"] for c in crews_data),
+        },
+        "all_crew_jobs": all_crew_jobs,
+    }
+
+    tmpl = "csapatok_content.html" if request.headers.get("HX-Request") else "csapatok.html"
+    return templates.TemplateResponse(tmpl, ctx)
+
+
+# ── Admin: XLSX backup ─────────────────────────────────────────────────────────
+
+def _cell_value(v):
+    if v is None:
+        return ""
+    if isinstance(v, (date, datetime)):
+        return v.isoformat()
+    if isinstance(v, bool):
+        return v
+    if hasattr(v, "value"):  # enum
+        return v.value
+    return v
+
+
+@app.get("/api/admin/backup")
+def admin_backup(session: Session = Depends(get_session)):
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+
+    specs = [
+        ("Projektek",  Project,           list(Project.__fields__)),
+        ("Koltsegek",  ProjectCost,        list(ProjectCost.__fields__)),
+        ("Logisztika", ProjectLogistics,   list(ProjectLogistics.__fields__)),
+        ("Naptar",     CalendarEntry,      list(CalendarEntry.__fields__)),
+    ]
+
+    for sheet_name, model, fields in specs:
+        ws = wb.create_sheet(sheet_name)
+        ws.append(fields)
+        for row in session.exec(select(model)).all():
+            ws.append([_cell_value(getattr(row, f, None)) for f in fields])
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    filename = f"wpc_backup_{date.today().isoformat()}.xlsx"
+    headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
+    )
+
+
+@app.get("/settings/panel", response_class=HTMLResponse)
+def settings_panel(request: Request):
+    return templates.TemplateResponse("settings_panel.html", {"request": request})

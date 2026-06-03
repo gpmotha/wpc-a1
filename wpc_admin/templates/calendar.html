@@ -92,11 +92,13 @@
   /* always: stage is a flex column so children stack naturally */
   #mainStage { display: flex; flex-direction: column; }
   /* week mode: no scroll, grid rows stretch to fill */
-  #mainStage.cal-week { overflow: hidden; padding-bottom: 12px; }
+  #mainStage.cal-week { overflow: hidden !important; padding-bottom: 12px; }
   #mainStage.cal-week #cal-grid-wrap { flex: 1; min-height: 0; overflow: hidden; }
   #mainStage.cal-week #cal-grid-wrap .cal-grid { height: 100%; overflow: hidden; }
   #mainStage.cal-week #cal-grid-wrap .cal-cell { min-height: 0; }
-  /* month mode: .stage overflow-y:auto (from base CSS) scrolls the stage */
+  /* month mode: stage scrolls; override base .stage:has(#cal-grid-wrap) { overflow:hidden } */
+  #mainStage:not(.cal-week) { overflow-y: auto !important; }
+  #mainStage:not(.cal-week) #cal-grid-wrap { flex: none !important; overflow: visible !important; }
 </style>
 <script>
 const CREWS      = ['Laci','Jenő','Csaba','Dani','Alex'];
@@ -144,7 +146,7 @@ let calEditTarget    = null;
 let CAL_DATA         = {};
 let eligibleProjects = [];
 
-function isoDate(d){ return d.toISOString().slice(0,10); }
+function isoDate(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function calKey(ds, crew){ return ds + '|' + crew; }
 
 function getWeekStart(offset){

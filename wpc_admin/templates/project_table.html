@@ -1,15 +1,74 @@
-{% set sc = {
-  "felmérendő": "s-felmerendo",
-  "lebeszélve": "s-lebeszélve",
-  "betervezve": "s-betervezve",
-  "folyamatban": "s-folyamatban",
-  "kész": "s-kesz",
-  "törölt": "s-torolt"
-} %}
 {% set cc = {
   "Laci": "crew-laci", "Jenő": "crew-jeno", "Csaba": "crew-csaba",
   "Dani": "crew-dani", "Alex": "crew-alex", "Nincs hozzárendelve": "crew-nincs"
 } %}
+{% set sc = {
+  "felmérendő": "s-felmerendo", "lebeszélve": "s-lebeszélve",
+  "betervezve": "s-betervezve", "folyamatban": "s-folyamatban",
+  "kész": "s-kesz", "törölt": "s-torolt"
+} %}
+{% set pipeline = [
+  ("felmérendő",  "Felmérendő",  "var(--sky)",   "2px solid var(--sky)"),
+  ("lebeszélve",  "Lebeszélve",  "var(--amber)", "2px solid var(--amber)"),
+  ("betervezve",  "Betervezve",  "var(--amber)", "2px solid var(--amber)"),
+  ("folyamatban", "Folyamatban", "var(--clay)",  "2px solid var(--clay)"),
+  ("kész",        "Kész",        "var(--moss)",  "2px solid var(--moss)"),
+] %}
+
+<!-- ── Kanban view ─────────────────────────────────────────────────── -->
+<div class="view-kanban">
+<div class="kanban">
+{% for val, label, col, border in pipeline %}
+{% set stage = projects_by_status.get(val, []) %}
+{% set stage_sum = sums_by_status.get(val, 0) %}
+{% set is_kesz = val == 'kész' %}
+<div class="kanban-col{% if is_kesz %} collapsed{% endif %}" id="kcol-{{ val }}" data-status="{{ val }}">
+  <div class="kanban-col-head" style="border-top: {{ border }}"
+    {% if is_kesz %}onclick="toggleKesz(this)" title="Kattints a kibontáshoz" style="border-top:{{ border }};cursor:pointer"{% endif %}>
+    <span class="kanban-col-name" style="color:{{ col }}">{{ label }}</span>
+    <span class="kanban-count">{{ stage | length }}</span>
+  </div>
+  {% if stage_sum > 0 %}
+  <div class="kanban-col-sum">{{ stage_sum | huf }}</div>
+  {% endif %}
+
+  {% for p in stage %}
+  {% set addr = ((p.iranyitoszam or '') ~ ' ' ~ (p.varos or '')) | trim if p.varos else (p.address or '') %}
+  <div class="proj-card"
+    data-crew="{{ p.crew.value }}"
+    hx-get="/projects/{{ p.id }}/detail"
+    hx-target="#detail-panel"
+    hx-swap="innerHTML"
+    onclick="selectCard(this)"
+  >
+    <div class="proj-card__type">{{ p.job_type.value }}{% if p.phase %} · {{ p.phase }}{% endif %}</div>
+    <div class="proj-card__name">{{ p.client_name }}</div>
+    {% if addr %}<div class="proj-card__addr">{{ addr }}</div>{% endif %}
+    <div class="proj-card__row">
+      <span class="crew-badge {{ cc.get(p.crew.value, 'crew-nincs') }}" style="font-size:10px;padding:1px 7px">{{ p.crew.value }}</span>
+      {% if p.planned_start_date %}<span class="proj-card__date">{{ p.planned_start_date }}</span>{% endif %}
+    </div>
+    {% if p.cost and p.total_net > 0 %}
+    <div class="proj-card__fee">{{ p.total_net | huf }}</div>
+    {% endif %}
+    {% if p.priority.value == 'Sürgős' or p.welding_required or (not p.crew_confirmed and p.crew.value != 'Nincs hozzárendelve') %}
+    <div class="proj-card__flags">
+      {% if p.priority.value == 'Sürgős' %}<span class="proj-flag warn">Sürgős</span>{% endif %}
+      {% if p.welding_required %}<span class="proj-flag">Hegesztés</span>{% endif %}
+      {% if not p.crew_confirmed and p.crew.value != 'Nincs hozzárendelve' %}<span class="proj-flag info">Nincs megerősítve</span>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+  {% else %}
+  <div class="kanban-empty">—</div>
+  {% endfor %}
+</div>
+{% endfor %}
+</div>
+</div>
+
+<!-- ── Table view ─────────────────────────────────────────────────── -->
+<div class="view-table">
 <div class="table-wrap">
   <table>
     <thead>
@@ -19,13 +78,16 @@
         <th>Csapat</th>
         <th>Státusz</th>
         <th>Tervezett kezdés</th>
-        <th>Munkadíj nettó</th>
+        <th>Összesen nettó</th>
         <th></th>
       </tr>
     </thead>
     <tbody>
       {% for p in projects %}
+      {% set addr = ((p.iranyitoszam or '') ~ ' ' ~ (p.varos or '')) | trim if p.varos else (p.address or '') %}
       <tr
+        data-status="{{ p.status.value }}"
+        data-crew="{{ p.crew.value }}"
         hx-get="/projects/{{ p.id }}/detail"
         hx-target="#detail-panel"
         hx-swap="innerHTML"
@@ -33,9 +95,9 @@
       >
         <td>
           <div class="td-name">{{ p.client_name }}</div>
-          {% if p.address %}<div class="td-sub">{{ p.address }}</div>{% endif %}
+          {% if addr %}<div class="td-sub">{{ addr }}</div>{% endif %}
         </td>
-        <td>{{ p.job_type.value }}</td>
+        <td>{{ p.job_type.value }}{% if p.phase %}<div class="td-sub">{{ p.phase }}</div>{% endif %}</td>
         <td><span class="crew-badge {{ cc.get(p.crew.value, 'crew-nincs') }}">{{ p.crew.value }}</span></td>
         <td>
           <span class="status {{ sc.get(p.status.value, '') }}">
@@ -43,7 +105,7 @@
           </span>
         </td>
         <td class="td-mono">{{ p.planned_start_date or "—" }}</td>
-        <td class="td-mono">{% if p.cost %}{{ p.cost.labor_fee | huf }}{% else %}—{% endif %}</td>
+        <td class="td-mono">{% if p.cost and p.total_net > 0 %}{{ p.total_net | huf }}{% else %}—{% endif %}</td>
         <td class="td-arrow">→</td>
       </tr>
       {% else %}
@@ -55,4 +117,5 @@
       {% endfor %}
     </tbody>
   </table>
+</div>
 </div>
