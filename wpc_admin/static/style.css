@@ -58,6 +58,10 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: 228px 1fr;
   overflow: hidden; min-height: 0;
 }
+/* calendar page: stage becomes a flex column so the grid fills remaining height */
+.stage:has(#cal-grid-wrap) { display:flex; flex-direction:column; overflow:hidden; padding-bottom:16px; }
+#cal-grid-wrap { flex:1; overflow:hidden; min-height:0; }
+#cal-grid-wrap .cal-grid { height:100%; }
 
 /* ── TOPBAR ───────────────────────────────────────────────────────────── */
 .topbar {
@@ -405,24 +409,25 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .map-chip:hover { background: var(--sunk); color: var(--ink-2); }
 .map-chip.active { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 
-/* Map pin marker */
-.wpc-pin {
-  width: 16px; height: 22px; position: relative;
-  filter: drop-shadow(0 2px 4px rgba(0,0,0,.35));
+/* Map pin marker (SVG-based, rendered via L.divIcon) */
+.wpc-pin-icon {
+  background: none !important;
+  border: none !important;
+  filter: drop-shadow(0 2px 5px rgba(0,0,0,.45));
   transition: filter .15s, transform .15s;
   transform-origin: 50% 100%;
+  cursor: pointer;
 }
-.wpc-pin:hover { filter: drop-shadow(0 3px 6px rgba(0,0,0,.5)); transform: scale(1.25); }
-.wpc-pin__head {
-  position: absolute; width: 16px; height: 16px;
-  border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
-  top: 0; left: 0;
+.wpc-pin-icon:hover { filter: drop-shadow(0 4px 8px rgba(0,0,0,.6)); transform: scale(1.2); }
+
+/* Crew chip initial badge (map filter bar) */
+.crew-chip-init {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 17px; height: 17px; border-radius: 50%;
+  font-size: 9px; font-weight: 700; font-family: var(--mono);
+  background: rgba(0,0,0,.15); flex-shrink: 0;
 }
-.wpc-pin__dot {
-  position: absolute; width: 7px; height: 7px; border-radius: 50%;
-  top: 4.5px; left: 4.5px;
-  border: 1.5px solid rgba(255,255,255,.5);
-}
+.map-chip.crew-chip.active .crew-chip-init { background: rgba(255,255,255,.2); }
 
 /* Missing coordinates badge */
 .missing-badge {
@@ -524,7 +529,8 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .cal-cell.today-row{outline:1px solid var(--clay-soft);outline-offset:-1px}
 .cal-entry{padding:3px 7px;font-family:var(--mono);font-size:10px;line-height:1.3;border-left:2px solid transparent;border-radius:0 4px 4px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer}
 .cal-entry.type-munka{background:var(--sky-soft);border-left-color:var(--sky);color:var(--sky)}
-.cal-entry.type-lebeszelt{background:var(--paper-2);border-left-color:var(--rule-2);color:var(--ink-3);text-decoration:line-through}
+.cal-entry.type-lebeszelt{background:var(--sky-soft);border-left-color:var(--sky);color:var(--sky);opacity:.6}
+.cal-entry.type-lebeszelt::before{content:'✓ ';}
 .cal-entry.type-szabi{background:var(--moss-soft);border-left-color:var(--moss);color:var(--moss)}
 .cal-entry.type-eso,.cal-entry.type-szel{background:var(--amber-soft);border-left-color:var(--amber);color:var(--amber)}
 .cal-entry.type-munkaszunet{background:var(--red-soft);border-left-color:var(--red);color:var(--red)}
@@ -538,4 +544,41 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .cal-popup-head{padding:11px 16px 9px;border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between}
 .cal-popup-title{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--clay)}
 .cal-popup-body{padding:12px 16px}
-.cal-popup-actions{padding:10px 16px;border-top:1px solid var(--rule);display:flex;gap:7px;justify-content:flex-end}
+.cal-popup-actions{padding:10px 16px;border-top:1px solid var(--rule);display:flex;gap:7px;justify-content:space-between;align-items:center}
+.cal-popup-actions__right{display:flex;gap:7px}
+
+/* ── popup form elements ─────────────────────────────────────────────────── */
+.form-lbl{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-3);margin-bottom:5px;display:block}
+.form-input{width:100%;box-sizing:border-box;font-size:13px;padding:8px 10px;border:1px solid var(--rule-2);border-radius:7px;background:var(--paper);color:var(--ink);font-family:var(--sans);outline:none;transition:.12s}
+.form-input:focus{border-color:var(--clay)}
+.form-btn{padding:7px 13px;font-family:var(--mono);font-size:11px;letter-spacing:.03em;border:1px solid var(--rule-2);background:var(--paper);color:var(--ink-2);cursor:pointer;border-radius:7px;transition:.12s}
+.form-btn:hover{border-color:var(--ink-3);color:var(--ink)}
+.form-btn.primary{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.form-btn.primary:hover{opacity:.88}
+.form-btn.danger{color:var(--red);border-color:var(--red-soft)}
+.form-btn.danger:hover{background:var(--red-soft)}
+
+/* ── nap típusa tag pills ────────────────────────────────────────────────── */
+.cem-type-tags{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px}
+.cem-type-tag{padding:4px 9px;font-family:var(--mono);font-size:10px;letter-spacing:.04em;border-radius:99px;border:1px solid;cursor:pointer;transition:.12s;opacity:.4;white-space:nowrap;background:transparent}
+.cem-type-tag:hover{opacity:.7}
+.cem-type-tag.active{opacity:1}
+.cem-type-tag.type-munka{border-color:var(--sky);color:var(--sky)}
+.cem-type-tag.type-munka.active{background:var(--sky-soft)}
+.cem-type-tag.type-szabi{border-color:var(--moss);color:var(--moss)}
+.cem-type-tag.type-szabi.active{background:var(--moss-soft)}
+.cem-type-tag.type-eso,.cem-type-tag.type-szel{border-color:var(--amber);color:var(--amber)}
+.cem-type-tag.type-eso.active,.cem-type-tag.type-szel.active{background:var(--amber-soft)}
+.cem-type-tag.type-munkaszunet{border-color:var(--red);color:var(--red)}
+.cem-type-tag.type-munkaszunet.active{background:var(--red-soft)}
+.cem-type-tag.type-beteg{border-color:#5b3f8c;color:#5b3f8c}
+.cem-type-tag.type-beteg.active{background:#e5d5f5}
+.cem-type-tag.type-lebeszelt{border-color:var(--sky);color:var(--sky)}
+.cem-type-tag.type-lebeszelt.active{background:var(--sky-soft)}
+
+/* ── special day badges in day label ────────────────────────────────────── */
+.cal-day-special{display:flex;flex-direction:column;gap:2px;margin-top:3px}
+.cal-day-badge{font-family:var(--mono);font-size:8px;padding:1px 4px;border-radius:3px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-day-badge.munkaszunet{background:var(--red-soft);color:var(--red)}
+.cal-day-badge.pihenonap{background:var(--amber-soft);color:var(--amber)}
+.cal-day-badge.pluszmunkanap{background:var(--moss-soft);color:var(--moss)}

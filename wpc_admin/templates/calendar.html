@@ -25,11 +25,11 @@
 <!-- legend -->
 <div class="cal-legend">
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--sky)"></div>Munka</div>
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--sky);opacity:.55"></div>✓ Lebeszélve</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--moss)"></div>Szabadság</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--amber)"></div>Eső / időjárás</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--red)"></div>Munkaszünet</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#5b3f8c"></div>Beteg</div>
-  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--rule-2)"></div>Lebeszélve</div>
 </div>
 
 <!-- grid -->
@@ -42,46 +42,58 @@
     <button class="close-btn" onclick="closeCalEntry()">✕</button>
   </div>
   <div class="cal-popup-body">
-    <div class="form-group" style="margin-bottom:10px">
+    <div style="margin-bottom:14px">
       <label class="form-lbl">Nap típusa</label>
-      <select class="form-select" id="cem-type" onchange="updateCemProjectRow()" style="font-size:13px;padding:7px 10px">
-        <option value="munka">Munka</option>
-        <option value="szabi">Szabadság</option>
-        <option value="eso">Eső</option>
-        <option value="szel">Szél / Hó</option>
-        <option value="munkaszunet">Munkaszüneti nap</option>
-        <option value="beteg">Beteg</option>
-        <option value="lebeszelt">Lebeszélve</option>
-      </select>
+      <div class="cem-type-tags" id="cem-type-tags">
+        <button class="cem-type-tag type-munka"       data-type="munka"       onclick="selectType('munka')">Munka</button>
+        <button class="cem-type-tag type-lebeszelt"   data-type="lebeszelt"   onclick="selectType('lebeszelt')">✓ Lebeszélve</button>
+        <button class="cem-type-tag type-szabi"       data-type="szabi"       onclick="selectType('szabi')">Szabadság</button>
+        <button class="cem-type-tag type-eso"         data-type="eso"         onclick="selectType('eso')">Eső</button>
+        <button class="cem-type-tag type-szel"        data-type="szel"        onclick="selectType('szel')">Szél / Hó</button>
+        <button class="cem-type-tag type-munkaszunet" data-type="munkaszunet" onclick="selectType('munkaszunet')">Munkaszünet</button>
+        <button class="cem-type-tag type-beteg"       data-type="beteg"       onclick="selectType('beteg')">Beteg</button>
+      </div>
+      <input type="hidden" id="cem-type" value="munka">
     </div>
-    <div class="form-group" id="cem-project-row">
+
+    <div id="cem-project-row">
       <label class="form-lbl">Megrendelő</label>
-      <input class="form-input" id="cem-text" type="text" placeholder="Kezdj gépelni…"
-             autocomplete="off" list="cem-project-list" style="font-size:13px;padding:7px 10px">
+      <input class="form-input" id="cem-text" type="text" placeholder="Keresés…"
+             autocomplete="off" list="cem-project-list">
       <datalist id="cem-project-list"></datalist>
       <input type="hidden" id="cem-projectId">
     </div>
+
     <div id="cem-free-text-row" style="display:none">
       <label class="form-lbl">Megjegyzés (opcionális)</label>
-      <input class="form-input" id="cem-free-text" type="text" placeholder=""
-             style="font-size:13px;padding:7px 10px">
+      <input class="form-input" id="cem-free-text" type="text" placeholder="">
     </div>
-    <div id="cem-weather-info" style="display:none;font-size:11px;color:var(--amber);background:var(--amber-soft);border:1px solid var(--rule-2);border-radius:6px;padding:8px 10px;line-height:1.5;margin-top:8px"></div>
+
+    <div id="cem-weather-info" style="display:none;font-size:11px;color:var(--amber);background:var(--amber-soft);border:1px solid var(--rule-2);border-radius:6px;padding:8px 10px;line-height:1.5;margin-top:10px"></div>
   </div>
+
   <div class="cal-popup-actions">
-    <button class="form-btn" style="color:var(--red)" onclick="deleteCalEntry()">Töröl</button>
-    <button class="form-btn" onclick="closeCalEntry()">Mégsem</button>
-    <button class="form-btn primary" onclick="saveCalEntry()">Mentés</button>
+    <button class="form-btn danger" onclick="deleteCalEntry()">Töröl</button>
+    <div class="cal-popup-actions__right">
+      <button class="form-btn" onclick="closeCalEntry()">Mégsem</button>
+      <button class="form-btn primary" onclick="saveCalEntry()">Mentés</button>
+    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<style>
+  /* weekly calendar fills the stage vertically */
+  #mainStage { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 12px; }
+  #cal-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; }
+  #cal-grid-wrap .cal-grid.week-mode { height: 100%; overflow: hidden; }
+  #cal-grid-wrap .cal-grid.week-mode .cal-cell { min-height: 0; }
+</style>
 <script>
 // ── Constants ────────────────────────────────────────────────────────────────
-const CREWS = ['Laci','Jenő','Csaba','Dani','Alex'];
-// Read crew colours from CSS variables so they stay in sync with the design tokens
-const _css = getComputedStyle(document.documentElement);
+const CREWS      = ['Laci','Jenő','Csaba','Dani','Alex'];
+const _css       = getComputedStyle(document.documentElement);
 const CREW_COLORS = {
   'Laci':  _css.getPropertyValue('--crew-laci').trim()  || '#1a4a7a',
   'Jenő':  _css.getPropertyValue('--crew-jeno').trim()  || '#4a1a7a',
@@ -89,21 +101,43 @@ const CREW_COLORS = {
   'Dani':  _css.getPropertyValue('--crew-dani').trim()  || '#6b2d00',
   'Alex':  _css.getPropertyValue('--crew-alex').trim()  || '#1a6b3a',
 };
-const DAYS_HU    = ['Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat','Vasárnap'];
-const MONTHS_HU  = ['január','február','március','április','május','június','július','augusztus','szeptember','október','november','december'];
+const DAYS_HU   = ['Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat','Vasárnap'];
+const MONTHS_HU = ['január','február','március','április','május','június',
+                   'július','augusztus','szeptember','október','november','december'];
 
-// ── State ───────────────────────────────────────────────────────────────────
-let calWeekOffset   = 0;
-let calMonthOffset  = 0;
-let calViewMode     = 'week';
-let calVisibleCrews = new Set(CREWS);
-let calEditTarget   = null;   // { dateStr, crew, existingId }
-let CAL_DATA        = {};     // "YYYY-MM-DD|Crew" → { id, type, text, project_id, project_name, project_address }
-let eligibleProjects = [];    // cached from /api/projects/eligible
+// ── 2026 Hungarian special days ───────────────────────────────────────────────
+const SPECIAL_DAYS = {
+  munkaszunet: new Set([
+    '2026-01-01','2026-03-15','2026-04-03','2026-04-05','2026-04-06',
+    '2026-05-01','2026-05-24','2026-05-25','2026-08-20','2026-10-23',
+    '2026-11-01','2026-12-25','2026-12-26',
+  ]),
+  pihenonap:     new Set(['2026-01-02','2026-08-21','2026-12-24']),
+  pluszmunkanap: new Set(['2026-01-10','2026-08-08','2026-12-12']),
+};
+const SPECIAL_LABELS = {
+  munkaszunet:   'Munkaszünet',
+  pihenonap:     'Pihenőnap',
+  pluszmunkanap: '+ Munkanap',
+};
+function getSpecialDay(ds){
+  if (SPECIAL_DAYS.munkaszunet.has(ds))   return 'munkaszunet';
+  if (SPECIAL_DAYS.pihenonap.has(ds))     return 'pihenonap';
+  if (SPECIAL_DAYS.pluszmunkanap.has(ds)) return 'pluszmunkanap';
+  return null;
+}
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
+let calWeekOffset    = 0;
+let calMonthOffset   = 0;
+let calViewMode      = 'week';
+let calVisibleCrews  = new Set(CREWS);
+let calEditTarget    = null;
+let CAL_DATA         = {};
+let eligibleProjects = [];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 function isoDate(d){ return d.toISOString().slice(0,10); }
-
 function calKey(ds, crew){ return ds + '|' + crew; }
 
 function getWeekStart(offset){
@@ -133,7 +167,7 @@ function getViewRange(){
 }
 
 function entryLabel(e){
-  if (e.type === 'munka'){
+  if (e.type === 'munka' || e.type === 'lebeszelt'){
     const name = e.project_name || e.text || '';
     const city = e.project_address ? e.project_address.split(',')[0] : '';
     return name + (city ? ' · ' + city : '');
@@ -141,7 +175,7 @@ function entryLabel(e){
   return e.text || e.type;
 }
 
-// ── Data loading ─────────────────────────────────────────────────────────────
+// ── Data ──────────────────────────────────────────────────────────────────────
 async function loadEligibleProjects(){
   if (eligibleProjects.length) return;
   const r = await fetch('/api/projects/eligible');
@@ -167,13 +201,11 @@ async function loadEntries(){
   const r = await fetch(`/api/calendar/entries?from=${from}&to=${to}`);
   const entries = await r.json();
   CAL_DATA = {};
-  entries.forEach(e => {
-    CAL_DATA[calKey(e.date, e.crew)] = e;
-  });
+  entries.forEach(e => { CAL_DATA[calKey(e.date, e.crew)] = e; });
   renderCalendar();
 }
 
-// ── Navigation ───────────────────────────────────────────────────────────────
+// ── Navigation ────────────────────────────────────────────────────────────────
 function calNav(dir){
   if (dir === 0){ calWeekOffset = 0; calMonthOffset = 0; }
   else if (calViewMode === 'week') calWeekOffset += dir;
@@ -183,9 +215,7 @@ function calNav(dir){
 
 function setCalMode(mode){
   calViewMode = mode;
-  document.querySelectorAll('.cal-mode-btn').forEach(b => {
-    b.classList.toggle('active', b.dataset.mode === mode);
-  });
+  document.querySelectorAll('.cal-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
   loadEntries();
 }
 
@@ -203,12 +233,28 @@ function toggleCrewFilter(crew, btn){
   renderCalendar();
 }
 
-// ── Rendering ────────────────────────────────────────────────────────────────
+// ── Day label (shared between week and month) ─────────────────────────────────
+function buildDayLabel(day, ds, extraStyle){
+  const dow       = (day.getDay()+6)%7;
+  const isWeekend = dow >= 5;
+  const isToday   = ds === isoDate(new Date());
+  const special   = getSpecialDay(ds);
+  const cls = `cal-day-label${isWeekend?' weekend':''}${isToday?' today':''}`;
+  const badge = special
+    ? `<div class="cal-day-special"><span class="cal-day-badge ${special}">${SPECIAL_LABELS[special]}</span></div>`
+    : '';
+  return `<div class="${cls}"${extraStyle ? ` style="${extraStyle}"` : ''}>
+    <div class="cal-day-num">${day.getDate()}</div>
+    <div class="cal-day-name">${DAYS_HU[dow].slice(0,3)}</div>
+    ${badge}
+  </div>`;
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
 function renderCalendar(){
   const visCrews = CREWS.filter(c => calVisibleCrews.has(c));
   const today    = isoDate(new Date());
 
-  // Build crew filter buttons once
   const filterEl = document.getElementById('cal-crew-filter');
   if (!filterEl.dataset.built){
     filterEl.dataset.built = '1';
@@ -234,23 +280,20 @@ function renderWeek(visCrews, today){
   document.getElementById('cal-week-label').textContent =
     `${ws.getFullYear()}. ${MONTHS_HU[ws.getMonth()]} ${ws.getDate()}. — ${MONTHS_HU[we.getMonth()]} ${we.getDate()}.`;
 
-  let html = `<div class="cal-grid" style="grid-template-columns:64px repeat(${visCrews.length},1fr);">`;
+  let html = `<div class="cal-grid week-mode" style="grid-template-columns:64px repeat(${visCrews.length},1fr);grid-template-rows:38px repeat(7,1fr);height:100%">`;
   html += `<div class="cal-header-cell day-col"></div>`;
   visCrews.forEach(crew => {
     html += `<div class="cal-header-cell" style="border-top:3px solid ${CREW_COLORS[crew]};color:${CREW_COLORS[crew]}">${crew}</div>`;
   });
 
   days.forEach(day => {
-    const ds = isoDate(day);
+    const ds  = isoDate(day);
     const dow = (day.getDay()+6)%7;
     const isWeekend = dow >= 5, isToday = ds === today;
-    html += `<div class="cal-day-label${isWeekend?' weekend':''}${isToday?' today':''}">
-      <div class="cal-day-num">${day.getDate()}</div>
-      <div class="cal-day-name">${DAYS_HU[dow].slice(0,3)}</div>
-    </div>`;
+    html += buildDayLabel(day, ds);
     visCrews.forEach(crew => {
       const e = CAL_DATA[calKey(ds, crew)];
-      html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" onclick="openCalEntry('${ds}','${crew}',this)">`;
+      html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:0" onclick="openCalEntry('${ds}','${crew}',this)">`;
       if (e){
         const lbl = entryLabel(e);
         html += `<div class="cal-entry type-${e.type}" title="${lbl}"
@@ -269,26 +312,23 @@ function renderMonth(visCrews, today){
   document.getElementById('cal-week-label').textContent =
     `${t.getFullYear()}. ${MONTHS_HU[t.getMonth()]}`;
 
-  let html = `<div class="cal-grid" style="grid-template-columns:64px repeat(${visCrews.length},1fr);">`;
+  let html = `<div class="cal-grid" style="grid-template-columns:64px repeat(${visCrews.length},1fr)">`;
   html += `<div class="cal-header-cell day-col"></div>`;
   visCrews.forEach(crew => {
     html += `<div class="cal-header-cell" style="border-top:3px solid ${CREW_COLORS[crew]};color:${CREW_COLORS[crew]}">${crew}</div>`;
   });
 
   days.forEach(day => {
-    const ds = isoDate(day);
+    const ds  = isoDate(day);
     const dow = (day.getDay()+6)%7;
     const isWeekend = dow >= 5, isToday = ds === today;
-    html += `<div class="cal-day-label${isWeekend?' weekend':''}${isToday?' today':''}" style="min-height:36px;padding:5px 8px;">
-      <div class="cal-day-num" style="font-size:13px">${day.getDate()}</div>
-      <div class="cal-day-name">${DAYS_HU[dow].slice(0,3)}</div>
-    </div>`;
+    html += buildDayLabel(day, ds, 'min-height:36px;padding:5px 8px');
     visCrews.forEach(crew => {
       const e = CAL_DATA[calKey(ds, crew)];
-      html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:36px;padding:3px 5px;" onclick="openCalEntry('${ds}','${crew}',this)">`;
+      html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:36px;padding:3px 5px" onclick="openCalEntry('${ds}','${crew}',this)">`;
       if (e){
         const lbl = entryLabel(e);
-        html += `<div class="cal-entry type-${e.type}" style="font-size:9px;padding:2px 5px;" title="${lbl}"
+        html += `<div class="cal-entry type-${e.type}" style="font-size:9px;padding:2px 5px" title="${lbl}"
                    onclick="event.stopPropagation();openCalEntry('${ds}','${crew}',this.parentElement)">${lbl}</div>`;
       }
       html += `<div class="cal-entry add-btn" style="font-size:9px">＋</div></div>`;
@@ -298,7 +338,16 @@ function renderMonth(visCrews, today){
   document.getElementById('cal-grid-wrap').innerHTML = html;
 }
 
-// ── Entry popup ──────────────────────────────────────────────────────────────
+// ── Type tag selection ────────────────────────────────────────────────────────
+function selectType(type){
+  document.getElementById('cem-type').value = type;
+  document.querySelectorAll('.cem-type-tag').forEach(t =>
+    t.classList.toggle('active', t.dataset.type === type)
+  );
+  updateCemProjectRow();
+}
+
+// ── Entry popup ───────────────────────────────────────────────────────────────
 function openCalEntry(dateStr, crew, cellEl){
   calEditTarget = { dateStr, crew };
   const e = CAL_DATA[calKey(dateStr, crew)];
@@ -307,18 +356,20 @@ function openCalEntry(dateStr, crew, cellEl){
   document.getElementById('cem-title').textContent =
     `${crew} — ${d.getDate()}. ${MONTHS_HU[d.getMonth()]}`;
 
-  document.getElementById('cem-type').value       = e ? e.type : 'munka';
-  document.getElementById('cem-text').value       = (e && e.type === 'munka') ? (e.project_name || e.text || '') : '';
-  document.getElementById('cem-free-text').value  = (e && e.type !== 'munka') ? (e.text || '') : '';
-  document.getElementById('cem-projectId').value  = (e && e.project_id) ? e.project_id : '';
-  updateCemProjectRow();
+  const type = e ? e.type : 'munka';
+  selectType(type);
+
+  const isMunkaLike = type === 'munka' || type === 'lebeszelt';
+  document.getElementById('cem-text').value      = (e && isMunkaLike)  ? (e.project_name || e.text || '') : '';
+  document.getElementById('cem-free-text').value = (e && !isMunkaLike) ? (e.text || '') : '';
+  document.getElementById('cem-projectId').value = (e && e.project_id) ? e.project_id : '';
 
   const modal = document.getElementById('calEntryModal');
   modal.style.display = 'block';
   const rect = cellEl.getBoundingClientRect();
-  let top  = rect.bottom + 6, left = rect.left;
-  if (left + 340 > window.innerWidth) left = window.innerWidth - 346;
-  if (top  + 300 > window.innerHeight) top  = rect.top - 308;
+  let top = rect.bottom + 6, left = rect.left;
+  if (left + 340 > window.innerWidth)  left = window.innerWidth - 346;
+  if (top  + 320 > window.innerHeight) top  = rect.top - 328;
   modal.style.top = top + 'px'; modal.style.left = left + 'px';
 
   buildAutocomplete();
@@ -331,9 +382,9 @@ function updateCemProjectRow(){
   const freeTextRow = document.getElementById('cem-free-text-row');
   const weatherInfo = document.getElementById('cem-weather-info');
 
-  projectRow.style.display  = type === 'munka'                     ? 'block' : 'none';
-  freeTextRow.style.display = ['szabi','beteg','lebeszelt','munkaszunet'].includes(type) ? 'block' : 'none';
-  weatherInfo.style.display = (type === 'eso' || type === 'szel')  ? 'block' : 'none';
+  projectRow.style.display  = (type === 'munka' || type === 'lebeszelt') ? 'block' : 'none';
+  freeTextRow.style.display = ['szabi','beteg','munkaszunet'].includes(type) ? 'block' : 'none';
+  weatherInfo.style.display = (type === 'eso' || type === 'szel') ? 'block' : 'none';
 
   if (type === 'eso')  weatherInfo.textContent = 'Esős nap — csak ennél a csapatnál kerül rögzítésre.';
   if (type === 'szel') weatherInfo.textContent = 'Szeles/havas nap — csak ennél a csapatnál kerül rögzítésre.';
@@ -354,22 +405,17 @@ function closeCalEntry(){
 async function saveCalEntry(){
   if (!calEditTarget) return;
   const { dateStr, crew } = calEditTarget;
-  const type      = document.getElementById('cem-type').value;
-  const projectId = document.getElementById('cem-projectId').value || null;
-  const text      = type === 'munka'
-    ? (document.getElementById('cem-text').value.trim())
-    : (document.getElementById('cem-free-text').value.trim());
+  const type        = document.getElementById('cem-type').value;
+  const isMunkaLike = type === 'munka' || type === 'lebeszelt';
+  const projectId   = document.getElementById('cem-projectId').value || null;
+  const text        = isMunkaLike
+    ? document.getElementById('cem-text').value.trim()
+    : document.getElementById('cem-free-text').value.trim();
 
   await fetch('/api/calendar/entries', {
     method:  'POST',
     headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      date:       dateStr,
-      crew:       crew,
-      type:       type,
-      text:       text,
-      project_id: projectId ? parseInt(projectId) : null,
-    }),
+    body:    JSON.stringify({ date: dateStr, crew, type, text, project_id: projectId ? parseInt(projectId) : null }),
   });
   closeCalEntry();
   await loadEntries();
@@ -392,7 +438,6 @@ document.addEventListener('click', ev => {
     closeCalEntry();
 });
 
-// ── Init ─────────────────────────────────────────────────────────────────────
 loadEligibleProjects();
 loadEntries();
 </script>
