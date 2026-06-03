@@ -643,6 +643,70 @@ def finance_view(request: Request, session: Session = Depends(get_session)):
     return templates.TemplateResponse("finance.html", ctx)
 
 
+# ── Ajánlatok page ────────────────────────────────────────────────────────────
+
+@app.get("/ajanlatok", response_class=HTMLResponse)
+def ajanlatok_view(request: Request, session: Session = Depends(get_session)):
+    projects = list(session.exec(
+        select(Project).where(
+            Project.status.in_([ProjectStatus.felmerendo, ProjectStatus.lebeszélve])
+        )
+    ).all())
+    projects.sort(key=lambda p: p.created_at, reverse=True)
+    total_quoted = sum(p.total_net for p in projects)
+    felmerendo_count = sum(1 for p in projects if p.status == ProjectStatus.felmerendo)
+    lebeszelt_count = sum(1 for p in projects if p.status == ProjectStatus.lebeszélve)
+    return templates.TemplateResponse("ajanlatok.html", {
+        "request": request,
+        "module": "admin",
+        "active_page": "ajanlatok",
+        "projects": projects,
+        "total_quoted": total_quoted,
+        "felmerendo_count": felmerendo_count,
+        "lebeszelt_count": lebeszelt_count,
+        **_ENUM_CTX,
+    })
+
+
+# ── Garancia page ─────────────────────────────────────────────────────────────
+
+@app.get("/garancia", response_class=HTMLResponse)
+def garancia_view(request: Request, session: Session = Depends(get_session)):
+    from datetime import timedelta
+    today = date.today()
+    projects = list(session.exec(
+        select(Project).where(
+            Project.status == ProjectStatus.kesz,
+            Project.actual_end_date.is_not(None),
+        )
+    ).all())
+    # Only projects still in or recently past warranty window (730 days)
+    projects = [p for p in projects if p.warranty_expires is not None]
+    projects.sort(key=lambda p: p.warranty_expires)
+
+    active = sum(1 for p in projects if p.warranty_expires >= today)
+    expiring_soon = sum(1 for p in projects if today <= p.warranty_expires <= today + timedelta(days=180))
+    expired = sum(1 for p in projects if p.warranty_expires < today)
+    days_remaining_list = [(p.warranty_expires - today).days for p in projects if p.warranty_expires >= today]
+    avg_days = round(sum(days_remaining_list) / len(days_remaining_list)) if days_remaining_list else 0
+
+    return templates.TemplateResponse("garancia.html", {
+        "request": request,
+        "module": "admin",
+        "active_page": "garancia",
+        "projects": projects,
+        "today": today,
+        "stats": {
+            "total": len(projects),
+            "active": active,
+            "expiring_soon": expiring_soon,
+            "expired": expired,
+            "avg_days": avg_days,
+        },
+        **_ENUM_CTX,
+    })
+
+
 # ── Map page ──────────────────────────────────────────────────────────────────
 
 @app.get("/map", response_class=HTMLResponse)

@@ -139,6 +139,11 @@ a { color: inherit; text-decoration: none; }
 .step__no svg {
   width: 18px; height: 18px; fill: currentColor; display: block;
 }
+.step__no img {
+  width: 18px; height: 18px; display: block; opacity: .45; transition: opacity .15s;
+}
+.step:hover .step__no img { opacity: .7; }
+.step.active .step__no img { opacity: 1; }
 .step.active .step__no { color: var(--clay); }
 .step__tx { overflow: hidden; transition: opacity .15s, max-width .22s; max-width: 160px; }
 .step__tx b { display: block; font-size: 13.5px; font-weight: 600; line-height: 1.3; }
@@ -241,6 +246,13 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .s-folyamatban{ color: var(--clay);   border-color: var(--clay-soft); background: var(--clay-soft); }
 .s-kesz       { color: var(--moss);   border-color: var(--moss-soft); background: var(--moss-soft); }
 .s-torolt     { color: var(--red);    border-color: var(--red-soft);  background: var(--red-soft); }
+.s-garancia   { color: var(--teal);  border-color: var(--teal-soft); background: var(--teal-soft); }
+
+/* ── WARRANTY BAR ──────────────────────────────────────────────────────── */
+.warranty-track { height: 5px; background: var(--paper-2); border-radius: 3px; margin-top: 4px; overflow: hidden; }
+.warranty-fill  { height: 100%; border-radius: 3px; background: var(--moss); transition: width .4s; }
+.warranty-fill.warn { background: var(--amber); }
+.warranty-fill.dead { background: var(--red); }
 
 /* generic pill (planner-style) */
 .pill { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; letter-spacing: .05em; text-transform: uppercase; padding: 3px 9px; border-radius: 99px; border: 1px solid currentColor; line-height: 1.5; }

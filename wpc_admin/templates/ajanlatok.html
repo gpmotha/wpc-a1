@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Ajánlatok{% endblock %}
+
+{% block page_title %}Pipeline{% endblock %}
+
+{% block content %}
+
+<div class="stat-strip" style="grid-template-columns:repeat(4,1fr)">
+  <div class="stat-cell">
+    <div class="l">Összes ajánlat</div>
+    <div class="v">{{ projects | length }}</div>
+    <div class="d">aktív pipeline</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Felmérendő</div>
+    <div class="v">{{ felmerendo_count }}</div>
+    <div class="d">új érdeklődő</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Lebeszélve</div>
+    <div class="v" style="color:var(--sky)">{{ lebeszelt_count }}</div>
+    <div class="d">ajánlat folyamatban</div>
+  </div>
+  <div class="stat-cell">
+    <div class="l">Összesített érték</div>
+    <div class="v" style="font-size:18px">{{ total_quoted | huf }}</div>
+    <div class="d">becsült pipeline</div>
+  </div>
+</div>
+
+<div class="filter-bar" id="ajanlatFilterBar">
+  <span class="filter-label">Státusz</span>
+  <button class="filter-btn active" onclick="filterAjanlat(this,'all')">Mind</button>
+  <button class="filter-btn" onclick="filterAjanlat(this,'felmérendő')">Felmérendő</button>
+  <button class="filter-btn" onclick="filterAjanlat(this,'lebeszélve')">Lebeszélve</button>
+  <div class="filter-search" style="margin-left:auto">
+    <span style="color:var(--ink-3);font-size:13px">⌕</span>
+    <input type="text" placeholder="Keresés..." oninput="searchAjanlat(this.value)"
+      style="border:none;outline:none;font-family:var(--mono);font-size:12px;background:transparent;color:var(--ink);width:180px">
+  </div>
+</div>
+
+{% if projects %}
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Megrendelő</th>
+        <th>Forgalmazó</th>
+        <th>Típus</th>
+        <th>Becsült érték</th>
+        <th>Státusz</th>
+        <th>Érkezés</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="ajanlatok-tbody">
+      {% for p in projects %}
+      <tr
+        data-status="{{ p.status.value }}"
+        data-search="{{ p.client_name | lower }} {{ p.distributor.value | lower }} {{ p.job_type.value | lower }}"
+        hx-get="/projects/{{ p.id }}/detail"
+        hx-target="#detail-panel"
+        hx-swap="innerHTML"
+        onclick="this.closest('tbody').querySelectorAll('.selected').forEach(r=>r.classList.remove('selected')); this.classList.add('selected')"
+        style="cursor:pointer"
+      >
+        <td class="td-id">WPC-{{ p.id }}</td>
+        <td>
+          <div class="td-name">{{ p.client_name }}</div>
+          {% if p.phone %}<div class="td-sub">{{ p.phone }}</div>{% endif %}
+        </td>
+        <td>{{ p.distributor.value }}</td>
+        <td>{{ p.job_type.value }}</td>
+        <td>
+          {% if p.total_net > 0 %}
+            <span style="font-family:var(--mono);font-size:12px">{{ p.total_net | huf }}</span>
+          {% else %}
+            <span style="color:var(--ink-4)">—</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if p.status.value == 'felmérendő' %}
+            <span class="status s-felmerendo"><span class="status-dot"></span>Felmérendő</span>
+          {% else %}
+            <span class="status s-lebeszélve"><span class="status-dot"></span>Lebeszélve</span>
+          {% endif %}
+        </td>
+        <td style="font-family:var(--mono);font-size:11px;color:var(--ink-3)">
+          {{ p.created_at.strftime('%Y-%m-%d') }}
+        </td>
+        <td>
+          <div class="row-actions">
+            <a href="/projects/{{ p.id }}/edit" class="row-btn" onclick="event.stopPropagation()">Szerk.</a>
+          </div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div style="text-align:center;padding:60px 0;color:var(--ink-3);font-family:var(--mono);font-size:13px">
+  Nincs aktív ajánlat.
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function filterAjanlat(btn, status) {
+  document.querySelectorAll('#ajanlatFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('#ajanlatok-tbody tr').forEach(row => {
+    row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
+  });
+}
+
+function searchAjanlat(q) {
+  const lq = q.toLowerCase();
+  document.querySelectorAll('#ajanlatok-tbody tr').forEach(row => {
+    row.style.display = row.dataset.search.includes(lq) ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}
