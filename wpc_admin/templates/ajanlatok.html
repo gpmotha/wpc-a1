@@ -110,18 +110,26 @@
 
 {% block extra_js %}
 <script>
+let _ajanlatStatus = 'all';
+let _ajanlatQ = '';
+
 function filterAjanlat(btn, status) {
   document.querySelectorAll('#ajanlatFilterBar .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.querySelectorAll('#ajanlatok-tbody tr').forEach(row => {
-    row.style.display = (status === 'all' || row.dataset.status === status) ? '' : 'none';
-  });
+  _ajanlatStatus = status;
+  _applyAjanlatFilters();
 }
 
 function searchAjanlat(q) {
-  const lq = q.toLowerCase();
+  _ajanlatQ = q.toLowerCase();
+  _applyAjanlatFilters();
+}
+
+function _applyAjanlatFilters() {
   document.querySelectorAll('#ajanlatok-tbody tr').forEach(row => {
-    row.style.display = row.dataset.search.includes(lq) ? '' : 'none';
+    const statusOk = _ajanlatStatus === 'all' || row.dataset.status === _ajanlatStatus;
+    const searchOk = row.dataset.search.includes(_ajanlatQ);
+    row.style.display = (statusOk && searchOk) ? '' : 'none';
   });
 }
 </script>

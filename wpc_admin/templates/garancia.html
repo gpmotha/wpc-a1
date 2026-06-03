@@ -73,7 +73,7 @@
         <td>{{ p.actual_end_date }}</td>
         <td>{{ p.warranty_expires }}</td>
         <td style="min-width:120px">
-          {% if days_left > 0 %}
+          {% if days_left >= 0 %}
             <div style="font-family:var(--mono);font-size:12px;color:var(--ink-2)">{{ days_left }} nap</div>
           {% else %}
             <div style="font-family:var(--mono);font-size:12px;color:var(--red)">Lejárt</div>

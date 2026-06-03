@@ -681,7 +681,6 @@ def garancia_view(request: Request, session: Session = Depends(get_session)):
         )
     ).all())
     # Only projects still in or recently past warranty window (730 days)
-    projects = [p for p in projects if p.warranty_expires is not None]
     projects.sort(key=lambda p: p.warranty_expires)
 
     active = sum(1 for p in projects if p.warranty_expires >= today)
@@ -874,9 +873,6 @@ def _run_geocode_background() -> None:
     from sqlmodel import Session as _Session, select as _select
 
     _log = logging.getLogger("wpc_admin.geocoder")
-    _geocode_state["running"] = True
-    _geocode_state["processed"] = 0
-    _geocode_state["errors"] = []
 
     with _Session(_engine) as sess:
         candidates = list(
@@ -949,6 +945,9 @@ def _run_geocode_background() -> None:
 def admin_geocode_start(background_tasks: BackgroundTasks):
     if _geocode_state["running"]:
         return JSONResponse({"error": "already running"}, status_code=409)
+    _geocode_state["running"] = True
+    _geocode_state["processed"] = 0
+    _geocode_state["errors"] = []
     background_tasks.add_task(_run_geocode_background)
     return JSONResponse({"started": True})
 
