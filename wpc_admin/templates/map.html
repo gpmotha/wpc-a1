@@ -1,0 +1,412 @@
+{% extends "base.html" %}
+{% block title %}Térkép{% endblock %}
+
+{% block breadcrumb %}<span>Térkép</span>{% endblock %}
+
+{% block topbar_actions %}
+<button class="topbar-primary" id="geocodeBtn" onclick="startGeocode()">Geocódolás futtatása</button>
+{% endblock %}
+
+{% block content %}
+<style>
+  /* Map page: stage fills height without scrolling */
+  #mainStage { overflow: hidden; display: flex; flex-direction: column; padding: 0; }
+</style>
+
+<div class="stage__head" style="padding: 20px 24px 12px; flex-shrink:0">
+  <div class="stage__kicker">02 · Térkép</div>
+  <h1 class="stage__title" style="display:inline-block;margin-right:12px">Munkák térképen</h1>
+  <span id="missingBadge" class="missing-badge" style="display:none"></span>
+</div>
+
+<!-- Filter bar -->
+<div class="map-filter-bar" style="flex-shrink:0">
+  <span class="filter-label">Státusz</span>
+  {% for val, label in [
+    ("felmérendő",  "Felmérendő"),
+    ("lebeszélve",  "Lebeszélve"),
+    ("betervezve",  "Betervezve"),
+    ("folyamatban", "Folyamatban"),
+    ("kész",        "Kész"),
+    ("törölt",      "Törölt")
+  ] %}
+  <button
+    class="map-chip {% if val not in ('kész', 'törölt') %}active{% endif %}"
+    data-status="{{ val }}"
+    onclick="toggleStatus(this)"
+  >{{ label }}</button>
+  {% endfor %}
+
+  <span class="filter-label" style="margin-left:12px">Csapat</span>
+  <button class="map-chip crew-chip active" data-crew="all" onclick="selectAllCrews(this)">Mind</button>
+  {% for crew_val in ["Laci", "Jenő", "Csaba", "Dani", "Alex", "Nincs hozzárendelve"] %}
+  <button class="map-chip crew-chip" data-crew="{{ crew_val }}" onclick="toggleCrew(this)">{{ crew_val }}</button>
+  {% endfor %}
+</div>
+
+<!-- Map canvas -->
+<div id="map" style="flex:1;min-height:0"></div>
+
+<!-- Zero-filter hint overlay -->
+<div id="noFilterHint" class="no-filter-hint" style="display:none">
+  Nincs szűrő aktív — válassz legalább egy státuszt
+</div>
+
+<!-- Layer picker -->
+<div id="layerPicker" style="position:absolute;bottom:32px;right:10px;z-index:500">
+  <button
+    class="layer-picker-btn"
+    title="Alaptérkép váltás"
+    onclick="this.nextElementSibling.classList.toggle('open')"
+  >
+    <svg viewBox="0 0 20 20" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <polygon points="10,2 18,7 10,12 2,7"/>
+      <polyline points="2,12 10,17 18,12"/>
+    </svg>
+  </button>
+  <div class="layer-picker-panel">
+    <div class="layer-picker-title">Alaptérkép</div>
+    <button class="layer-opt active" data-layer="standard" onclick="selectLayer('standard');this.closest('.layer-picker-panel').classList.remove('open')">Standard</button>
+    <button class="layer-opt" data-layer="voyager" onclick="selectLayer('voyager');this.closest('.layer-picker-panel').classList.remove('open')">Voyager</button>
+    <button class="layer-opt" data-layer="positron" onclick="selectLayer('positron');this.closest('.layer-picker-panel').classList.remove('open')">Positron</button>
+    <button class="layer-opt" data-layer="dark" onclick="selectLayer('dark');this.closest('.layer-picker-panel').classList.remove('open')">Dark</button>
+  </div>
+</div>
+
+<!-- Geocode progress bar -->
+<div id="geocodeProgress" style="display:none;position:fixed;bottom:60px;right:24px;z-index:9999;
+     background:var(--card);border:1px solid var(--rule);border-radius:8px;padding:12px 16px;
+     box-shadow:var(--shadow-lg);min-width:220px;font-size:13px;color:var(--ink-2)">
+  <div style="margin-bottom:6px;font-weight:600;color:var(--ink)">Geocódolás</div>
+  <div id="geocodeStatus">Indítás…</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Leaflet CSS/JS -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+
+<script>
+/* ── Color maps ── */
+const STATUS_COLORS = {
+  'felmérendő':  '#3f6e8c',
+  'lebeszélve':  '#c8902f',
+  'betervezve':  '#5c7a4a',
+  'folyamatban': '#bb5b34',
+  'kész':        '#b4ad9f',
+  'törölt':      '#9c3a3a',
+};
+const WARRANTY_JOB_TYPE = 'Javítás/garancia';
+const WARRANTY_COLOR = '#7a5c8c';
+
+// Read from CSS tokens so map stays in sync with the design system
+const _css = getComputedStyle(document.documentElement);
+const CREW_COLORS = {
+  'Laci':                _css.getPropertyValue('--crew-laci').trim()  || '#1a4a7a',
+  'Jenő':                _css.getPropertyValue('--crew-jeno').trim()  || '#4a1a7a',
+  'Csaba':               _css.getPropertyValue('--crew-csaba').trim() || '#0f5c5c',
+  'Dani':                _css.getPropertyValue('--crew-dani').trim()  || '#6b2d00',
+  'Alex':                _css.getPropertyValue('--crew-alex').trim()  || '#1a6b3a',
+  'Nincs hozzárendelve': _css.getPropertyValue('--crew-nincs').trim() || '#8b8479',
+};
+
+/* ── Tile layer definitions ── */
+const LAYER_DEFS = {
+  standard: {
+    label: 'Standard',
+    url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+    maxZoom: 19,
+  },
+  voyager: {
+    label: 'Voyager',
+    url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+  },
+  positron: {
+    label: 'Positron',
+    url: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+  },
+  dark: {
+    label: 'Dark',
+    url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    attr: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+    maxZoom: 19,
+  },
+};
+const LIGHT_LAYERS = ['standard', 'voyager', 'positron'];
+
+function _savedLightLayer() {
+  const s = localStorage.getItem('wpc-map-layer');
+  return (s && LAYER_DEFS[s]) ? s : 'standard';
+}
+
+function _activeLayerKey() {
+  return document.documentElement.dataset.theme === 'dark' ? 'dark' : _savedLightLayer();
+}
+
+/* ── Map init ── */
+const map = L.map('map', { center: [47.4979, 19.0402], zoom: 8 });
+let tileLayer = (function () {
+  const key = _activeLayerKey();
+  const def = LAYER_DEFS[key];
+  return L.tileLayer(def.url, { attribution: def.attr, maxZoom: def.maxZoom }).addTo(map);
+})();
+
+/* ── Filter state ── */
+let activeStatuses = new Set(
+  Array.from(document.querySelectorAll('.map-chip[data-status].active'))
+    .map(b => b.dataset.status)
+);
+let activeCrews = new Set(['all']); // "all" means no crew restriction
+
+/* ── Markers store ── */
+let allMarkers = [];     // { marker, data }
+let openPopup = null;
+
+/* ── Format helpers ── */
+function fmtHuf(n) {
+  if (n == null) return '—';
+  return String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') + ' Ft';
+}
+function fmtDate(s) {
+  if (!s) return '—';
+  const [y, m, d] = s.split('-');
+  return `${y}.${m}.${d}`;
+}
+function orDash(v) { return v != null && v !== '' ? v : '—'; }
+
+const CREW_CLASS = {
+  'Laci':'crew-laci','Jenő':'crew-jeno','Csaba':'crew-csaba',
+  'Dani':'crew-dani','Alex':'crew-alex','Nincs hozzárendelve':'crew-nincs',
+};
+function crewBadge(crew) {
+  if (!crew) return '—';
+  const cls = CREW_CLASS[crew] || 'crew-nincs';
+  return `<span class="crew-badge ${cls}">${crew}</span>`;
+}
+
+/* ── Build popup HTML ── */
+function buildPopup(d) {
+  const statusColors = {
+    'felmérendő':  '#3f6e8c', 'lebeszélve': '#c8902f', 'betervezve': '#5c7a4a',
+    'folyamatban': '#bb5b34', 'kész': '#b4ad9f', 'törölt': '#9c3a3a',
+  };
+  const statusLabels = {
+    'felmérendő': 'Felmérendő', 'lebeszélve': 'Lebeszélve', 'betervezve': 'Betervezve',
+    'folyamatban': 'Folyamatban', 'kész': 'Kész', 'törölt': 'Törölt',
+  };
+  const sc = statusColors[d.status] || '#b4ad9f';
+  return `
+<div class="map-popup">
+  <div class="map-popup__head">
+    <strong>${d.client_name}</strong>
+    <span class="map-popup__pill" style="background:${sc}20;color:${sc};border-color:${sc}40">
+      ${statusLabels[d.status] || d.status}
+    </span>
+  </div>
+  ${d.phase ? `<div class="map-popup__row"><span class="map-popup__lbl">Fázis</span>${d.phase}</div>` : ''}
+  <div class="map-popup__row"><span class="map-popup__lbl">Cím</span>${orDash(d.address)}</div>
+  <div class="map-popup__row"><span class="map-popup__lbl">Csapat</span>${crewBadge(d.crew)}</div>
+  <div class="map-popup__row"><span class="map-popup__lbl">Kezdés</span>${fmtDate(d.planned_start_date)}${d.planned_work_days ? ` · ${d.planned_work_days} nap` : ''}</div>
+  <div class="map-popup__row"><span class="map-popup__lbl">Munkadíj</span>${fmtHuf(d.labor_fee)}</div>
+  <div class="map-popup__foot">
+    <a href="/projects/${d.id}/edit" class="btn" style="font-size:12px;padding:4px 10px">Megnyitás →</a>
+  </div>
+</div>`;
+}
+
+/* ── Load markers ── */
+async function loadMarkers() {
+  const resp = await fetch('/api/jobs/map?status=all');
+  const data = await resp.json();
+  allMarkers = [];
+
+  for (const d of data) {
+    const statusColor = d.job_type === WARRANTY_JOB_TYPE ? WARRANTY_COLOR : (STATUS_COLORS[d.status] || '#b4ad9f');
+    const crewColor   = CREW_COLORS[d.crew] || '#8b8479';
+
+    const icon = L.divIcon({
+      className: '',
+      html: `<div class="wpc-pin">
+               <div class="wpc-pin__head" style="background:${crewColor}"></div>
+               <div class="wpc-pin__dot"  style="background:${statusColor}"></div>
+             </div>`,
+      iconSize:    [16, 22],
+      iconAnchor:  [8, 22],
+      popupAnchor: [0, -26],
+    });
+
+    const marker = L.marker([d.lat, d.lng], { icon }).addTo(map);
+    marker.bindTooltip(d.client_name, { permanent: false, direction: 'top', offset: [0, -24] });
+
+    marker.on('click', function () {
+      if (openPopup) { openPopup.remove(); openPopup = null; }
+      const popup = L.popup({ maxWidth: 280, className: 'map-popup-wrap' })
+        .setLatLng([d.lat, d.lng])
+        .setContent(buildPopup(d))
+        .openOn(map);
+      openPopup = popup;
+    });
+
+    allMarkers.push({ marker, data: d });
+  }
+
+  applyFilters();
+  updateNoFilterHint();
+}
+
+/* ── Apply filters ── */
+function applyFilters() {
+  for (const { marker, data } of allMarkers) {
+    const statusOk = activeStatuses.has(data.status);
+    const crewOk = activeCrews.has('all') || activeCrews.has(data.crew);
+    const visible = statusOk && crewOk;
+    const el = marker.getElement();
+    if (el) {
+      el.style.opacity = visible ? '' : '0';
+      el.style.pointerEvents = visible ? '' : 'none';
+    }
+  }
+  updateNoFilterHint();
+}
+
+function updateNoFilterHint() {
+  const anyActive = activeStatuses.size > 0;
+  document.getElementById('noFilterHint').style.display = anyActive ? 'none' : 'flex';
+}
+
+/* ── Status chip toggle ── */
+function toggleStatus(btn) {
+  const s = btn.dataset.status;
+  if (btn.classList.contains('active')) {
+    btn.classList.remove('active');
+    activeStatuses.delete(s);
+  } else {
+    btn.classList.add('active');
+    activeStatuses.add(s);
+  }
+  applyFilters();
+}
+
+/* ── Crew filter ── */
+function selectAllCrews(btn) {
+  activeCrews = new Set(['all']);
+  document.querySelectorAll('.crew-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  applyFilters();
+}
+
+function toggleCrew(btn) {
+  const c = btn.dataset.crew;
+  // If "all" is active, switch to exclusive crew selection
+  if (activeCrews.has('all')) {
+    activeCrews = new Set();
+    document.querySelector('.crew-chip[data-crew="all"]').classList.remove('active');
+  }
+  if (btn.classList.contains('active')) {
+    btn.classList.remove('active');
+    activeCrews.delete(c);
+    // If nothing selected, revert to "all"
+    if (activeCrews.size === 0) {
+      activeCrews = new Set(['all']);
+      document.querySelector('.crew-chip[data-crew="all"]').classList.add('active');
+    }
+  } else {
+    btn.classList.add('active');
+    activeCrews.add(c);
+  }
+  applyFilters();
+}
+
+/* ── Layer switching ── */
+function selectLayer(key) {
+  const def = LAYER_DEFS[key];
+  if (!def) return;
+  map.removeLayer(tileLayer);
+  tileLayer = L.tileLayer(def.url, { attribution: def.attr, maxZoom: def.maxZoom }).addTo(map);
+  // Persist light-mode choice
+  if (key !== 'dark') localStorage.setItem('wpc-map-layer', key);
+  // Update picker UI
+  document.querySelectorAll('.layer-opt').forEach(b => {
+    b.classList.toggle('active', b.dataset.layer === key);
+  });
+}
+
+/* ── Theme switch: swap tile layer ── */
+const _origToggleTheme = window.toggleTheme;
+window.toggleTheme = function () {
+  _origToggleTheme && _origToggleTheme();
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  selectLayer(isDark ? 'dark' : _savedLightLayer());
+  updateLayerPickerState();
+};
+
+function updateLayerPickerState() {
+  const isDark = document.documentElement.dataset.theme === 'dark';
+  const current = _activeLayerKey();
+  document.querySelectorAll('.layer-opt').forEach(b => {
+    b.classList.toggle('active', b.dataset.layer === current);
+    // Dim light-only layers when in dark mode (dark layer is auto)
+    b.disabled = isDark && b.dataset.layer !== 'dark';
+    b.style.opacity = (isDark && b.dataset.layer !== 'dark') ? '0.4' : '';
+  });
+}
+
+/* ── Missing badge ── */
+async function loadMissingBadge() {
+  const resp = await fetch('/api/jobs/map/missing');
+  const data = await resp.json();
+  const badge = document.getElementById('missingBadge');
+  if (data.count > 0) {
+    badge.textContent = `⚠ ${data.count} cím koordináta nélkül`;
+    badge.style.display = '';
+  }
+}
+
+/* ── Geocode admin ── */
+let _geocodePollTimer = null;
+
+async function startGeocode() {
+  const btn = document.getElementById('geocodeBtn');
+  btn.disabled = true;
+  document.getElementById('geocodeProgress').style.display = '';
+  document.getElementById('geocodeStatus').textContent = 'Indítás…';
+
+  await fetch('/api/admin/geocode', { method: 'POST' });
+  pollGeocodeStatus();
+}
+
+async function pollGeocodeStatus() {
+  const resp = await fetch('/api/admin/geocode/status');
+  const s = await resp.json();
+  document.getElementById('geocodeStatus').textContent =
+    `${s.processed} / ${s.total} cím geocódolva${s.errors && s.errors.length ? ` · ${s.errors.length} hiba` : ''}`;
+
+  if (s.running) {
+    _geocodePollTimer = setTimeout(pollGeocodeStatus, 1200);
+  } else {
+    document.getElementById('geocodeBtn').disabled = false;
+    setTimeout(() => { document.getElementById('geocodeProgress').style.display = 'none'; }, 4000);
+    await loadMarkers();
+    await loadMissingBadge();
+  }
+}
+
+/* ── Close layer panel on outside click ── */
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('#layerPicker')) {
+    document.querySelector('.layer-picker-panel')?.classList.remove('open');
+  }
+});
+
+/* ── Init ── */
+updateLayerPickerState();
+loadMarkers();
+loadMissingBadge();
+</script>
+{% endblock %}

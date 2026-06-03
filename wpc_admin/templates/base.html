@@ -40,11 +40,27 @@
     <nav class="rail">
       <div class="rail__cap">Modulok</div>
 
-      <a class="step {% if module == 'admin' %}active{% endif %}" href="/">
+      <a class="step {% if active_page == 'projects' or (active_page is not defined and module == 'admin') %}active{% endif %}" href="/">
         <div class="step__no">A</div>
         <div class="step__tx">
           <b>Projektek</b>
           <span>Admin &amp; ütemezés</span>
+        </div>
+      </a>
+
+      <a class="step {% if active_page == 'calendar' %}active{% endif %}" href="/calendar">
+        <div class="step__no">N</div>
+        <div class="step__tx">
+          <b>Naptár</b>
+          <span>Csapatok beosztása</span>
+        </div>
+      </a>
+
+      <a class="step {% if active_page == 'map' %}active{% endif %}" href="/map">
+        <div class="step__no">T</div>
+        <div class="step__tx">
+          <b>Térkép</b>
+          <span>Munkák térképen</span>
         </div>
       </a>
 

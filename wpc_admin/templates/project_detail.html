@@ -6,6 +6,10 @@
   "kész": "s-kesz",
   "törölt": "s-torolt"
 } %}
+{% set cc = {
+  "Laci": "crew-laci", "Jenő": "crew-jeno", "Csaba": "crew-csaba",
+  "Dani": "crew-dani", "Alex": "crew-alex", "Nincs hozzárendelve": "crew-nincs"
+} %}
 <div class="dp-header">
   <div>
     <div class="dp-id">{{ "WPC-%04d"|format(p.id) }}</div>
@@ -35,7 +39,7 @@
       </div>
       <div class="fi">
         <div class="fl">Csapat</div>
-        <div class="fv">{{ p.crew.value }}</div>
+        <div class="fv"><span class="crew-badge {{ cc.get(p.crew.value, 'crew-nincs') }}">{{ p.crew.value }}</span></div>
       </div>
       <div class="fi">
         <div class="fl">Fázis</div>

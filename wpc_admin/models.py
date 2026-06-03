@@ -121,6 +121,19 @@ class Project(SQLModel, table=True):
 
     notes: Optional[str] = None
 
+    # Address (structured, for geocoding)
+    iranyitoszam: Optional[str] = None
+    varos:        Optional[str] = None
+    utca:         Optional[str] = None
+    hazszam:      Optional[str] = None
+    egyeb:        Optional[str] = None  # display only (em./ajtó), not geocoded
+
+    # Geocoding result
+    lat:          Optional[float] = None
+    lng:          Optional[float] = None
+    geocode_ok:   Optional[int] = Field(default=0)  # 0=not tried, 1=ok, -1=failed
+    geocode_at:   Optional[str] = None              # ISO timestamp of last attempt
+
     # Relationships
     cost: Optional[ProjectCost] = Relationship(back_populates="project")
     logistics: Optional[ProjectLogistics] = Relationship(back_populates="project")
@@ -140,3 +153,22 @@ class Project(SQLModel, table=True):
     def warranty_expires(self) -> Optional[date]:
         from datetime import timedelta
         return self.actual_end_date + timedelta(days=730) if self.actual_end_date else None
+
+
+class CalendarEntryType(str, Enum):
+    munka       = "munka"
+    szabi       = "szabi"
+    eso         = "eso"
+    szel        = "szel"
+    munkaszunet = "munkaszunet"
+    beteg       = "beteg"
+    lebeszelt   = "lebeszelt"
+
+
+class CalendarEntry(SQLModel, table=True):
+    id:         Optional[int] = Field(default=None, primary_key=True)
+    date:       date
+    crew:       Crew
+    entry_type: CalendarEntryType
+    text:       Optional[str] = None
+    project_id: Optional[int] = Field(default=None, foreign_key="project.id")

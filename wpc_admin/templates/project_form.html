@@ -26,10 +26,35 @@
         <input type="text" name="phone" value="{{ p.phone if p and p.phone else '' }}">
       </div>
     </div>
+    <!-- Structured address for geocoding -->
+    <div class="form-row" style="grid-template-columns:100px 1fr 1fr 1fr">
+      <div class="field">
+        <label>Irányítószám</label>
+        <input type="text" name="iranyitoszam" maxlength="4" value="{{ p.iranyitoszam if p and p.iranyitoszam else '' }}" placeholder="1072">
+      </div>
+      <div class="field">
+        <label>Város</label>
+        <input type="text" name="varos" value="{{ p.varos if p and p.varos else '' }}" placeholder="Budapest">
+      </div>
+      <div class="field">
+        <label>Utca</label>
+        <input type="text" name="utca" value="{{ p.utca if p and p.utca else '' }}" placeholder="Síp utca">
+      </div>
+      <div class="field">
+        <label>Házszám</label>
+        <input type="text" name="hazszam" value="{{ p.hazszam if p and p.hazszam else '' }}" placeholder="18">
+      </div>
+    </div>
     <div class="form-row c1">
       <div class="field">
-        <label>Cím</label>
-        <input type="text" name="address" value="{{ p.address if p and p.address else '' }}">
+        <label>Egyéb (em./ajtó — csak megjelenítéshez)</label>
+        <input type="text" name="egyeb" value="{{ p.egyeb if p and p.egyeb else '' }}" placeholder="2. em. 4. ajtó">
+      </div>
+    </div>
+    <div class="form-row c1">
+      <div class="field">
+        <label>Teljes cím (régi mező — megmarad a meglévő adatoknál)</label>
+        <input type="text" name="address" value="{{ p.address if p and p.address else '' }}" placeholder="Régi, szabad formátumú cím">
       </div>
     </div>
     <div class="form-row">

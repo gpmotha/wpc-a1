@@ -6,6 +6,10 @@
   "kész": "s-kesz",
   "törölt": "s-torolt"
 } %}
+{% set cc = {
+  "Laci": "crew-laci", "Jenő": "crew-jeno", "Csaba": "crew-csaba",
+  "Dani": "crew-dani", "Alex": "crew-alex", "Nincs hozzárendelve": "crew-nincs"
+} %}
 <div class="table-wrap">
   <table>
     <thead>
@@ -32,7 +36,7 @@
           {% if p.address %}<div class="td-sub">{{ p.address }}</div>{% endif %}
         </td>
         <td>{{ p.job_type.value }}</td>
-        <td>{{ p.crew.value }}</td>
+        <td><span class="crew-badge {{ cc.get(p.crew.value, 'crew-nincs') }}">{{ p.crew.value }}</span></td>
         <td>
           <span class="status {{ sc.get(p.status.value, '') }}">
             <span class="status-dot"></span>{{ p.status.value }}

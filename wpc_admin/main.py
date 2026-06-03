@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
 
-from fastapi import Depends, FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi import BackgroundTasks, Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlmodel import Session, select
+from sqlmodel import Session, SQLModel, select
 
 from database import create_tables, engine, get_session
 from models import (
+    CalendarEntry, CalendarEntryType,
     Crew, Distributor, InvoiceType, JobType, Priority,
     Project, ProjectCost, ProjectLogistics, ProjectStatus,
 )
@@ -253,6 +254,7 @@ def index(
     ctx = {
         "request": request,
         "module": "admin",
+        "active_page": "projects",
         "projects": filtered,
         "stats": stats,
         "q": q,
@@ -305,6 +307,11 @@ def _parse_form(form) -> tuple[dict, dict, dict]:
     project_data = dict(
         client_name=form.get("client_name", "").strip(),
         address=s("address"),
+        iranyitoszam=s("iranyitoszam"),
+        varos=s("varos"),
+        utca=s("utca"),
+        hazszam=s("hazszam"),
+        egyeb=s("egyeb"),
         phone=s("phone"),
         email=s("email"),
         invoice_type=InvoiceType(form.get("invoice_type") or InvoiceType.maganszemely.value),
@@ -356,7 +363,11 @@ def project_new_form(request: Request):
 
 
 @app.post("/projects/new")
-async def project_new_submit(request: Request, session: Session = Depends(get_session)):
+async def project_new_submit(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    session: Session = Depends(get_session),
+):
     form = await request.form()
     project_data, cost_data, logistics_data = _parse_form(form)
     p = Project(**project_data)
@@ -366,6 +377,8 @@ async def project_new_submit(request: Request, session: Session = Depends(get_se
     if any(v for v in logistics_data.values()):
         session.add(ProjectLogistics(project_id=p.id, **logistics_data))
     session.commit()
+    if _needs_geocode(p):
+        background_tasks.add_task(_geocode_project_by_id, p.id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -390,6 +403,7 @@ def project_edit_form(
 async def project_edit_submit(
     project_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
 ):
     p = session.get(Project, project_id)
@@ -397,6 +411,10 @@ async def project_edit_submit(
         return HTMLResponse("<p>Nem található</p>", status_code=404)
     form = await request.form()
     project_data, cost_data, logistics_data = _parse_form(form)
+    address_changed = any(
+        getattr(p, k) != project_data.get(k)
+        for k in ("iranyitoszam", "varos", "utca", "hazszam", "address")
+    )
     for k, v in project_data.items():
         setattr(p, k, v)
     p.updated_at = datetime.utcnow()
@@ -414,8 +432,15 @@ async def project_edit_submit(
         session.add(p.logistics)
     elif any(v for v in logistics_data.values()):
         session.add(ProjectLogistics(project_id=p.id, **logistics_data))
+    # clear stale geocode when address changes so it re-geocodes
+    if address_changed and p.lat is not None:
+        p.lat = None
+        p.lng = None
+        p.geocode_ok = 0
     session.add(p)
     session.commit()
+    if _needs_geocode(p):
+        background_tasks.add_task(_geocode_project_by_id, p.id)
     return RedirectResponse("/", status_code=303)
 
 
@@ -447,3 +472,369 @@ def project_delete_submit(
         session.add(p)
         session.commit()
     return RedirectResponse("/", status_code=303)
+
+
+# ── Map page ──────────────────────────────────────────────────────────────────
+
+@app.get("/map", response_class=HTMLResponse)
+def map_view(request: Request):
+    return templates.TemplateResponse(
+        "map.html",
+        {"request": request, "module": "admin", "active_page": "map"},
+    )
+
+
+# ── Map API ───────────────────────────────────────────────────────────────────
+
+_STATUS_ORDER = [
+    ProjectStatus.felmerendo,
+    ProjectStatus.lebeszélve,
+    ProjectStatus.betervezve,
+    ProjectStatus.folyamatban,
+    ProjectStatus.kesz,
+    ProjectStatus.torolt,
+]
+_DEFAULT_HIDDEN = {ProjectStatus.kesz.value, ProjectStatus.torolt.value}
+
+
+@app.get("/api/jobs/map")
+def jobs_map(
+    status: str = "",
+    crew: str = "",
+    session: Session = Depends(get_session),
+):
+    stmt = select(Project).where(Project.lat.is_not(None), Project.lng.is_not(None))
+    projects = list(session.exec(stmt).all())
+
+    # Parse filter params
+    status_filter = {v.strip() for v in status.split(",") if v.strip()} if status else set()
+    crew_filter = {v.strip() for v in crew.split(",") if v.strip()} if crew else set()
+
+    # "all" = no status filtering; otherwise default excludes kész and törölt
+    if status_filter == {"all"}:
+        pass  # return all statuses
+    elif not status_filter:
+        projects = [p for p in projects if p.status.value not in _DEFAULT_HIDDEN]
+    else:
+        projects = [p for p in projects if p.status.value in status_filter]
+
+    if crew_filter:
+        projects = [p for p in projects if p.crew.value in crew_filter]
+
+    def fmt_address(p: Project) -> str:
+        parts = []
+        if p.iranyitoszam:
+            parts.append(p.iranyitoszam)
+        if p.varos:
+            parts.append(p.varos)
+        if p.utca:
+            parts.append(p.utca)
+        if p.hazszam:
+            parts.append(p.hazszam)
+        if p.egyeb:
+            parts.append(p.egyeb)
+        return ", ".join(parts) if parts else (p.address or "")
+
+    result = []
+    for p in projects:
+        result.append({
+            "id": p.id,
+            "client_name": p.client_name,
+            "status": p.status.value,
+            "job_type": p.job_type.value,
+            "crew": p.crew.value,
+            "phase": p.phase,
+            "address": fmt_address(p),
+            "planned_start_date": p.planned_start_date.isoformat() if p.planned_start_date else None,
+            "planned_work_days": p.planned_work_days,
+            "labor_fee": p.cost.labor_fee if p.cost else None,
+            "lat": p.lat,
+            "lng": p.lng,
+        })
+    return JSONResponse(result)
+
+
+@app.get("/api/jobs/map/missing")
+def jobs_map_missing(session: Session = Depends(get_session)):
+    all_with_address = list(
+        session.exec(
+            select(Project).where(
+                Project.lat.is_(None),
+                (Project.iranyitoszam.is_not(None)) | (Project.address.is_not(None)),
+            )
+        ).all()
+    )
+    return JSONResponse({"count": len(all_with_address)})
+
+
+# ── Geocode helpers ───────────────────────────────────────────────────────────
+
+def _needs_geocode(p: Project) -> bool:
+    if p.lat is not None:
+        return False
+    return bool(
+        (p.iranyitoszam and p.varos and p.utca and p.hazszam) or p.address
+    )
+
+
+def _geocode_project_by_id(project_id: int) -> None:
+    import time
+    import urllib.request
+    import urllib.parse
+    import json as _json
+    from database import engine as _engine
+    from sqlmodel import Session as _Session
+
+    with _Session(_engine) as sess:
+        p = sess.get(Project, project_id)
+        if not p or p.lat is not None:
+            return
+
+        if p.iranyitoszam and p.varos and p.utca and p.hazszam:
+            params = {
+                "street": f"{p.hazszam} {p.utca}",
+                "city": p.varos,
+                "postalcode": p.iranyitoszam,
+                "country": "Hungary",
+                "format": "json",
+                "limit": "1",
+            }
+        elif p.address:
+            params = {"q": f"{p.address}, Hungary", "format": "json", "limit": "1"}
+        else:
+            return
+
+        url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(params)
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "WPC-Admin/1.0"})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+            if data:
+                p.lat = float(data[0]["lat"])
+                p.lng = float(data[0]["lon"])
+                p.geocode_ok = 1
+            else:
+                p.geocode_ok = -1
+        except Exception:
+            p.geocode_ok = -1
+
+        p.geocode_at = datetime.utcnow().isoformat()
+        sess.add(p)
+        sess.commit()
+
+
+# ── Geocode admin ─────────────────────────────────────────────────────────────
+
+_geocode_state: dict = {"running": False, "processed": 0, "total": 0, "errors": []}
+
+
+def _run_geocode_background() -> None:
+    import time
+    import urllib.request
+    import urllib.parse
+    import json as _json
+    from database import engine as _engine
+    from sqlmodel import Session as _Session, select as _select
+
+    _geocode_state["running"] = True
+    _geocode_state["processed"] = 0
+    _geocode_state["errors"] = []
+
+    with _Session(_engine) as sess:
+        candidates = list(
+            sess.exec(
+                _select(Project).where(Project.lat.is_(None))
+            ).all()
+        )
+        _geocode_state["total"] = len(candidates)
+
+        for p in candidates:
+            query: dict = {}
+            if p.iranyitoszam and p.varos and p.utca and p.hazszam:
+                query = {
+                    "street": f"{p.hazszam} {p.utca}",
+                    "city": p.varos,
+                    "postalcode": p.iranyitoszam,
+                    "country": "Hungary",
+                    "format": "json",
+                    "limit": "1",
+                }
+            elif p.address:
+                query = {
+                    "q": f"{p.address}, Hungary",
+                    "format": "json",
+                    "limit": "1",
+                }
+            else:
+                p.geocode_ok = -1
+                p.geocode_at = datetime.utcnow().isoformat()
+                sess.add(p)
+                sess.commit()
+                _geocode_state["processed"] += 1
+                continue
+
+            url = "https://nominatim.openstreetmap.org/search?" + urllib.parse.urlencode(query)
+            try:
+                req = urllib.request.Request(url, headers={"User-Agent": "WPC-Admin/1.0"})
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    data = _json.loads(resp.read())
+                if data:
+                    p.lat = float(data[0]["lat"])
+                    p.lng = float(data[0]["lon"])
+                    p.geocode_ok = 1
+                else:
+                    p.geocode_ok = -1
+                    _geocode_state["errors"].append(p.address or f"id={p.id}")
+            except Exception as exc:
+                p.geocode_ok = -1
+                _geocode_state["errors"].append(str(exc))
+            p.geocode_at = datetime.utcnow().isoformat()
+            sess.add(p)
+            sess.commit()
+            _geocode_state["processed"] += 1
+            time.sleep(1)
+
+    _geocode_state["running"] = False
+
+
+@app.post("/api/admin/geocode")
+def admin_geocode_start(background_tasks: BackgroundTasks):
+    if _geocode_state["running"]:
+        return JSONResponse({"error": "already running"}, status_code=409)
+    background_tasks.add_task(_run_geocode_background)
+    return JSONResponse({"started": True})
+
+
+@app.get("/api/admin/geocode/status")
+def admin_geocode_status():
+    return JSONResponse(_geocode_state)
+
+
+# ── Calendar ─────────────────────────────────────────────────────────────────
+
+@app.get("/calendar", response_class=HTMLResponse)
+def calendar_view(request: Request):
+    return templates.TemplateResponse(
+        "calendar.html",
+        {"request": request, "module": "admin", "active_page": "calendar"},
+    )
+
+
+@app.get("/api/calendar/entries")
+def calendar_entries_list(
+    from_: str = "",
+    to: str = "",
+    session: Session = Depends(get_session),
+):
+    stmt = select(CalendarEntry)
+    if from_:
+        try:
+            stmt = stmt.where(CalendarEntry.date >= date.fromisoformat(from_))
+        except ValueError:
+            pass
+    if to:
+        try:
+            stmt = stmt.where(CalendarEntry.date <= date.fromisoformat(to))
+        except ValueError:
+            pass
+    entries = list(session.exec(stmt).all())
+    result = []
+    for e in entries:
+        project_name = None
+        project_address = None
+        if e.project_id:
+            p = session.get(Project, e.project_id)
+            if p:
+                project_name = p.client_name
+                project_address = p.address
+        result.append({
+            "id": e.id,
+            "date": e.date.isoformat(),
+            "crew": e.crew.value,
+            "type": e.entry_type.value,
+            "text": e.text,
+            "project_id": e.project_id,
+            "project_name": project_name,
+            "project_address": project_address,
+        })
+    return JSONResponse(result)
+
+
+class _CalEntryBody(SQLModel):
+    date: str
+    crew: str
+    type: str
+    text: str = ""
+    project_id: int | None = None
+
+
+@app.post("/api/calendar/entries")
+def calendar_entry_upsert(
+    body: _CalEntryBody,
+    session: Session = Depends(get_session),
+):
+    try:
+        entry_date = date.fromisoformat(body.date)
+        crew = Crew(body.crew)
+        entry_type = CalendarEntryType(body.type)
+    except (ValueError, KeyError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+
+    existing = session.exec(
+        select(CalendarEntry).where(
+            CalendarEntry.date == entry_date,
+            CalendarEntry.crew == crew,
+        )
+    ).first()
+
+    if existing:
+        existing.entry_type = entry_type
+        existing.text = body.text or None
+        existing.project_id = body.project_id
+        session.add(existing)
+        session.commit()
+        session.refresh(existing)
+        return JSONResponse({"id": existing.id})
+    else:
+        entry = CalendarEntry(
+            date=entry_date,
+            crew=crew,
+            entry_type=entry_type,
+            text=body.text or None,
+            project_id=body.project_id,
+        )
+        session.add(entry)
+        session.commit()
+        session.refresh(entry)
+        return JSONResponse({"id": entry.id})
+
+
+@app.delete("/api/calendar/entries/{entry_id}")
+def calendar_entry_delete(
+    entry_id: int,
+    session: Session = Depends(get_session),
+):
+    entry = session.get(CalendarEntry, entry_id)
+    if entry:
+        session.delete(entry)
+        session.commit()
+    return JSONResponse({"deleted": entry_id})
+
+
+@app.get("/api/projects/eligible")
+def projects_eligible(session: Session = Depends(get_session)):
+    eligible_statuses = {
+        ProjectStatus.betervezve,
+        ProjectStatus.folyamatban,
+        ProjectStatus.kesz,
+    }
+    projects = list(session.exec(select(Project)).all())
+    return JSONResponse([
+        {
+            "id": p.id,
+            "client_name": p.client_name,
+            "address": p.address or "",
+        }
+        for p in projects
+        if p.status in eligible_statuses
+    ])

@@ -1,0 +1,399 @@
+{% extends "base.html" %}
+{% block title %}Naptár{% endblock %}
+{% block breadcrumb %}<span>Naptár</span>{% endblock %}
+
+{% block content %}
+<div class="stage__head">
+  <div class="stage__kicker">02 · Naptár</div>
+  <h1 class="stage__title">Csapatok beosztása</h1>
+  <p class="stage__lead">Heti és havi nézet, szerkeszthető bejegyzések.</p>
+</div>
+
+<!-- toolbar -->
+<div class="cal-toolbar">
+  <button class="cal-nav-btn" onclick="calNav(-1)">← Előző</button>
+  <button class="cal-nav-btn" onclick="calNav(0)">Ma</button>
+  <button class="cal-nav-btn" onclick="calNav(1)">Következő →</button>
+  <span class="cal-week-label" id="cal-week-label"></span>
+  <div class="cal-mode-seg">
+    <button class="cal-mode-btn active" data-mode="week" onclick="setCalMode('week')">Heti</button>
+    <button class="cal-mode-btn" data-mode="month" onclick="setCalMode('month')">Havi</button>
+  </div>
+  <div class="cal-crew-filter" id="cal-crew-filter"></div>
+</div>
+
+<!-- legend -->
+<div class="cal-legend">
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--sky)"></div>Munka</div>
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--moss)"></div>Szabadság</div>
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--amber)"></div>Eső / időjárás</div>
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--red)"></div>Munkaszünet</div>
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#5b3f8c"></div>Beteg</div>
+  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--rule-2)"></div>Lebeszélve</div>
+</div>
+
+<!-- grid -->
+<div id="cal-grid-wrap"></div>
+
+<!-- entry popup -->
+<div id="calEntryModal" class="cal-popup" style="display:none">
+  <div class="cal-popup-head">
+    <div class="cal-popup-title" id="cem-title">Bejegyzés</div>
+    <button class="close-btn" onclick="closeCalEntry()">✕</button>
+  </div>
+  <div class="cal-popup-body">
+    <div class="form-group" style="margin-bottom:10px">
+      <label class="form-lbl">Nap típusa</label>
+      <select class="form-select" id="cem-type" onchange="updateCemProjectRow()" style="font-size:13px;padding:7px 10px">
+        <option value="munka">Munka</option>
+        <option value="szabi">Szabadság</option>
+        <option value="eso">Eső</option>
+        <option value="szel">Szél / Hó</option>
+        <option value="munkaszunet">Munkaszüneti nap</option>
+        <option value="beteg">Beteg</option>
+        <option value="lebeszelt">Lebeszélve</option>
+      </select>
+    </div>
+    <div class="form-group" id="cem-project-row">
+      <label class="form-lbl">Megrendelő</label>
+      <input class="form-input" id="cem-text" type="text" placeholder="Kezdj gépelni…"
+             autocomplete="off" list="cem-project-list" style="font-size:13px;padding:7px 10px">
+      <datalist id="cem-project-list"></datalist>
+      <input type="hidden" id="cem-projectId">
+    </div>
+    <div id="cem-free-text-row" style="display:none">
+      <label class="form-lbl">Megjegyzés (opcionális)</label>
+      <input class="form-input" id="cem-free-text" type="text" placeholder=""
+             style="font-size:13px;padding:7px 10px">
+    </div>
+    <div id="cem-weather-info" style="display:none;font-size:11px;color:var(--amber);background:var(--amber-soft);border:1px solid var(--rule-2);border-radius:6px;padding:8px 10px;line-height:1.5;margin-top:8px"></div>
+  </div>
+  <div class="cal-popup-actions">
+    <button class="form-btn" style="color:var(--red)" onclick="deleteCalEntry()">Töröl</button>
+    <button class="form-btn" onclick="closeCalEntry()">Mégsem</button>
+    <button class="form-btn primary" onclick="saveCalEntry()">Mentés</button>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+const CREWS = ['Laci','Jenő','Csaba','Dani','Alex'];
+// Read crew colours from CSS variables so they stay in sync with the design tokens
+const _css = getComputedStyle(document.documentElement);
+const CREW_COLORS = {
+  'Laci':  _css.getPropertyValue('--crew-laci').trim()  || '#1a4a7a',
+  'Jenő':  _css.getPropertyValue('--crew-jeno').trim()  || '#4a1a7a',
+  'Csaba': _css.getPropertyValue('--crew-csaba').trim() || '#0f5c5c',
+  'Dani':  _css.getPropertyValue('--crew-dani').trim()  || '#6b2d00',
+  'Alex':  _css.getPropertyValue('--crew-alex').trim()  || '#1a6b3a',
+};
+const DAYS_HU    = ['Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat','Vasárnap'];
+const MONTHS_HU  = ['január','február','március','április','május','június','július','augusztus','szeptember','október','november','december'];
+
+// ── State ───────────────────────────────────────────────────────────────────
+let calWeekOffset   = 0;
+let calMonthOffset  = 0;
+let calViewMode     = 'week';
+let calVisibleCrews = new Set(CREWS);
+let calEditTarget   = null;   // { dateStr, crew, existingId }
+let CAL_DATA        = {};     // "YYYY-MM-DD|Crew" → { id, type, text, project_id, project_name, project_address }
+let eligibleProjects = [];    // cached from /api/projects/eligible
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+function isoDate(d){ return d.toISOString().slice(0,10); }
+
+function calKey(ds, crew){ return ds + '|' + crew; }
+
+function getWeekStart(offset){
+  const t = new Date(); t.setHours(0,0,0,0);
+  const dow = (t.getDay()+6)%7;
+  t.setDate(t.getDate() - dow + offset*7);
+  return t;
+}
+
+function getMonthDays(offset){
+  const t = new Date(); t.setDate(1); t.setHours(0,0,0,0);
+  t.setMonth(t.getMonth() + offset);
+  const y = t.getFullYear(), m = t.getMonth();
+  const n = new Date(y, m+1, 0).getDate();
+  return Array.from({length:n}, (_,i) => new Date(y, m, i+1));
+}
+
+function getViewRange(){
+  if (calViewMode === 'week'){
+    const ws = getWeekStart(calWeekOffset);
+    const we = new Date(ws); we.setDate(ws.getDate()+6);
+    return { from: isoDate(ws), to: isoDate(we) };
+  } else {
+    const days = getMonthDays(calMonthOffset);
+    return { from: isoDate(days[0]), to: isoDate(days[days.length-1]) };
+  }
+}
+
+function entryLabel(e){
+  if (e.type === 'munka'){
+    const name = e.project_name || e.text || '';
+    const city = e.project_address ? e.project_address.split(',')[0] : '';
+    return name + (city ? ' · ' + city : '');
+  }
+  return e.text || e.type;
+}
+
+// ── Data loading ─────────────────────────────────────────────────────────────
+async function loadEligibleProjects(){
+  if (eligibleProjects.length) return;
+  const r = await fetch('/api/projects/eligible');
+  eligibleProjects = await r.json();
+  buildAutocomplete();
+}
+
+function buildAutocomplete(){
+  const list = document.getElementById('cem-project-list');
+  if (!list) return;
+  list.innerHTML = '';
+  eligibleProjects.forEach(p => {
+    const city = p.address ? p.address.split(',')[0] : '';
+    const opt  = document.createElement('option');
+    opt.value      = p.client_name + (city ? ' – ' + city : '');
+    opt.dataset.id = p.id;
+    list.appendChild(opt);
+  });
+}
+
+async function loadEntries(){
+  const { from, to } = getViewRange();
+  const r = await fetch(`/api/calendar/entries?from=${from}&to=${to}`);
+  const entries = await r.json();
+  CAL_DATA = {};
+  entries.forEach(e => {
+    CAL_DATA[calKey(e.date, e.crew)] = e;
+  });
+  renderCalendar();
+}
+
+// ── Navigation ───────────────────────────────────────────────────────────────
+function calNav(dir){
+  if (dir === 0){ calWeekOffset = 0; calMonthOffset = 0; }
+  else if (calViewMode === 'week') calWeekOffset += dir;
+  else calMonthOffset += dir;
+  loadEntries();
+}
+
+function setCalMode(mode){
+  calViewMode = mode;
+  document.querySelectorAll('.cal-mode-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  loadEntries();
+}
+
+function toggleCrewFilter(crew, btn){
+  if (calVisibleCrews.has(crew)){
+    if (calVisibleCrews.size === 1) return;
+    calVisibleCrews.delete(crew);
+    btn.style.cssText = '';
+    btn.classList.remove('active');
+  } else {
+    calVisibleCrews.add(crew);
+    btn.classList.add('active');
+    btn.style.cssText = `background:${CREW_COLORS[crew]};color:#fff;border-color:transparent`;
+  }
+  renderCalendar();
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+function renderCalendar(){
+  const visCrews = CREWS.filter(c => calVisibleCrews.has(c));
+  const today    = isoDate(new Date());
+
+  // Build crew filter buttons once
+  const filterEl = document.getElementById('cal-crew-filter');
+  if (!filterEl.dataset.built){
+    filterEl.dataset.built = '1';
+    CREWS.forEach(crew => {
+      const btn = document.createElement('button');
+      btn.className = 'cal-crew-btn active';
+      btn.textContent = crew;
+      btn.dataset.crew = crew;
+      btn.style.cssText = `background:${CREW_COLORS[crew]};color:#fff;border-color:transparent`;
+      btn.onclick = () => toggleCrewFilter(crew, btn);
+      filterEl.appendChild(btn);
+    });
+  }
+
+  if (calViewMode === 'week') renderWeek(visCrews, today);
+  else renderMonth(visCrews, today);
+}
+
+function renderWeek(visCrews, today){
+  const ws   = getWeekStart(calWeekOffset);
+  const days = Array.from({length:7}, (_, i) => { const d = new Date(ws); d.setDate(ws.getDate()+i); return d; });
+  const we   = days[6];
+  document.getElementById('cal-week-label').textContent =
+    `${ws.getFullYear()}. ${MONTHS_HU[ws.getMonth()]} ${ws.getDate()}. — ${MONTHS_HU[we.getMonth()]} ${we.getDate()}.`;
+
+  let html = `<div class="cal-grid" style="grid-template-columns:64px repeat(${visCrews.length},1fr);">`;
+  html += `<div class="cal-header-cell day-col"></div>`;
+  visCrews.forEach(crew => {
+    html += `<div class="cal-header-cell" style="border-top:3px solid ${CREW_COLORS[crew]};color:${CREW_COLORS[crew]}">${crew}</div>`;
+  });
+
+  days.forEach(day => {
+    const ds = isoDate(day);
+    const dow = (day.getDay()+6)%7;
+    const isWeekend = dow >= 5, isToday = ds === today;
+    html += `<div class="cal-day-label${isWeekend?' weekend':''}${isToday?' today':''}">
+      <div class="cal-day-num">${day.getDate()}</div>
+      <div class="cal-day-name">${DAYS_HU[dow].slice(0,3)}</div>
+    </div>`;
+    visCrews.forEach(crew => {
+      const e = CAL_DATA[calKey(ds, crew)];
+      html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" onclick="openCalEntry('${ds}','${crew}',this)">`;
+      if (e){
+        const lbl = entryLabel(e);
+        html += `<div class="cal-entry type-${e.type}" title="${lbl}"
+                   onclick="event.stopPropagation();openCalEntry('${ds}','${crew}',this.parentElement)">${lbl}</div>`;
+      }
+      html += `<div class="cal-entry add-btn">＋</div></div>`;
+    });
+  });
+  html += `</div>`;
+  document.getElementById('cal-grid-wrap').innerHTML = html;
+}
+
+function renderMonth(visCrews, today){
+  const days = getMonthDays(calMonthOffset);
+  const t    = new Date(); t.setMonth(t.getMonth() + calMonthOffset);
+  document.getElementById('cal-week-label').textContent =
+    `${t.getFullYear()}. ${MONTHS_HU[t.getMonth()]}`;
+
+  let html = `<div class="cal-grid" style="grid-template-columns:64px repeat(${visCrews.length},1fr);">`;
+  html += `<div class="cal-header-cell day-col"></div>`;
+  visCrews.forEach(crew => {
+    html += `<div class="cal-header-cell" style="border-top:3px solid ${CREW_COLORS[crew]};color:${CREW_COLORS[crew]}">${crew}</div>`;
+  });
+
+  days.forEach(day => {
+    const ds = isoDate(day);
+    const dow = (day.getDay()+6)%7;
+    const isWeekend = dow >= 5, isToday = ds === today;
+    html += `<div class="cal-day-label${isWeekend?' weekend':''}${isToday?' today':''}" style="min-height:36px;padding:5px 8px;">
+      <div class="cal-day-num" style="font-size:13px">${day.getDate()}</div>
+      <div class="cal-day-name">${DAYS_HU[dow].slice(0,3)}</div>
+    </div>`;
+    visCrews.forEach(crew => {
+      const e = CAL_DATA[calKey(ds, crew)];
+      html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:36px;padding:3px 5px;" onclick="openCalEntry('${ds}','${crew}',this)">`;
+      if (e){
+        const lbl = entryLabel(e);
+        html += `<div class="cal-entry type-${e.type}" style="font-size:9px;padding:2px 5px;" title="${lbl}"
+                   onclick="event.stopPropagation();openCalEntry('${ds}','${crew}',this.parentElement)">${lbl}</div>`;
+      }
+      html += `<div class="cal-entry add-btn" style="font-size:9px">＋</div></div>`;
+    });
+  });
+  html += `</div>`;
+  document.getElementById('cal-grid-wrap').innerHTML = html;
+}
+
+// ── Entry popup ──────────────────────────────────────────────────────────────
+function openCalEntry(dateStr, crew, cellEl){
+  calEditTarget = { dateStr, crew };
+  const e = CAL_DATA[calKey(dateStr, crew)];
+
+  const d = new Date(dateStr);
+  document.getElementById('cem-title').textContent =
+    `${crew} — ${d.getDate()}. ${MONTHS_HU[d.getMonth()]}`;
+
+  document.getElementById('cem-type').value       = e ? e.type : 'munka';
+  document.getElementById('cem-text').value       = (e && e.type === 'munka') ? (e.project_name || e.text || '') : '';
+  document.getElementById('cem-free-text').value  = (e && e.type !== 'munka') ? (e.text || '') : '';
+  document.getElementById('cem-projectId').value  = (e && e.project_id) ? e.project_id : '';
+  updateCemProjectRow();
+
+  const modal = document.getElementById('calEntryModal');
+  modal.style.display = 'block';
+  const rect = cellEl.getBoundingClientRect();
+  let top  = rect.bottom + 6, left = rect.left;
+  if (left + 340 > window.innerWidth) left = window.innerWidth - 346;
+  if (top  + 300 > window.innerHeight) top  = rect.top - 308;
+  modal.style.top = top + 'px'; modal.style.left = left + 'px';
+
+  buildAutocomplete();
+  setTimeout(() => document.getElementById('cem-text').focus(), 50);
+}
+
+function updateCemProjectRow(){
+  const type        = document.getElementById('cem-type').value;
+  const projectRow  = document.getElementById('cem-project-row');
+  const freeTextRow = document.getElementById('cem-free-text-row');
+  const weatherInfo = document.getElementById('cem-weather-info');
+
+  projectRow.style.display  = type === 'munka'                     ? 'block' : 'none';
+  freeTextRow.style.display = ['szabi','beteg','lebeszelt','munkaszunet'].includes(type) ? 'block' : 'none';
+  weatherInfo.style.display = (type === 'eso' || type === 'szel')  ? 'block' : 'none';
+
+  if (type === 'eso')  weatherInfo.textContent = 'Esős nap — csak ennél a csapatnál kerül rögzítésre.';
+  if (type === 'szel') weatherInfo.textContent = 'Szeles/havas nap — csak ennél a csapatnál kerül rögzítésre.';
+}
+
+document.addEventListener('input', e => {
+  if (e.target.id !== 'cem-text') return;
+  const list = document.getElementById('cem-project-list');
+  const opt  = [...list.options].find(o => o.value === e.target.value);
+  document.getElementById('cem-projectId').value = opt ? opt.dataset.id : '';
+});
+
+function closeCalEntry(){
+  document.getElementById('calEntryModal').style.display = 'none';
+  calEditTarget = null;
+}
+
+async function saveCalEntry(){
+  if (!calEditTarget) return;
+  const { dateStr, crew } = calEditTarget;
+  const type      = document.getElementById('cem-type').value;
+  const projectId = document.getElementById('cem-projectId').value || null;
+  const text      = type === 'munka'
+    ? (document.getElementById('cem-text').value.trim())
+    : (document.getElementById('cem-free-text').value.trim());
+
+  await fetch('/api/calendar/entries', {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify({
+      date:       dateStr,
+      crew:       crew,
+      type:       type,
+      text:       text,
+      project_id: projectId ? parseInt(projectId) : null,
+    }),
+  });
+  closeCalEntry();
+  await loadEntries();
+  showToast('Mentve ✓');
+}
+
+async function deleteCalEntry(){
+  if (!calEditTarget) return;
+  const e = CAL_DATA[calKey(calEditTarget.dateStr, calEditTarget.crew)];
+  if (e && e.id){
+    await fetch(`/api/calendar/entries/${e.id}`, { method: 'DELETE' });
+  }
+  closeCalEntry();
+  await loadEntries();
+}
+
+document.addEventListener('click', ev => {
+  const modal = document.getElementById('calEntryModal');
+  if (modal.style.display !== 'none' && !modal.contains(ev.target) && !ev.target.closest('.cal-cell'))
+    closeCalEntry();
+});
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+loadEligibleProjects();
+loadEntries();
+</script>
+{% endblock %}
