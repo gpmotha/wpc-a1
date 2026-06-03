@@ -89,11 +89,12 @@
 
 {% block extra_js %}
 <style>
-  #mainStage { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 12px; }
-  #cal-grid-wrap { flex: 1; min-height: 0; overflow: hidden; }
-  #cal-grid-wrap.month-mode { overflow-y: auto; }
-  #cal-grid-wrap .cal-grid.week-mode { height: 100%; overflow: hidden; }
-  #cal-grid-wrap .cal-grid.week-mode .cal-cell { min-height: 0; }
+  /* week mode: stage fills vertically, grid rows stretch */
+  #mainStage.cal-week { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 12px; }
+  #mainStage.cal-week #cal-grid-wrap { flex: 1; min-height: 0; overflow: hidden; }
+  #mainStage.cal-week #cal-grid-wrap .cal-grid { height: 100%; overflow: hidden; }
+  #mainStage.cal-week #cal-grid-wrap .cal-cell { min-height: 0; }
+  /* month mode: stage scrolls normally (inherits .stage overflow-y:auto) */
 </style>
 <script>
 const CREWS      = ['Laci','Jenő','Csaba','Dani','Alex'];
@@ -109,23 +110,29 @@ const DAYS_HU   = ['Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat',
 const MONTHS_HU = ['január','február','március','április','május','június',
                    'július','augusztus','szeptember','október','november','december'];
 
-// 2026 Hungarian special days
+// 2026 Hungarian special days — { type, label }
 const SPECIAL_DAYS = {
-  munkaszunet: new Set([
-    '2026-01-01','2026-03-15','2026-04-03','2026-04-05','2026-04-06',
-    '2026-05-01','2026-05-24','2026-05-25','2026-08-20','2026-10-23',
-    '2026-11-01','2026-12-25','2026-12-26',
-  ]),
-  pihenonap:     new Set(['2026-01-02','2026-08-21','2026-12-24']),
-  pluszmunkanap: new Set(['2026-01-10','2026-08-08','2026-12-12']),
+  '2026-01-01': { type:'munkaszunet',   label:'Újév' },
+  '2026-01-02': { type:'pihenonap',     label:'Pihenőnap' },
+  '2026-01-10': { type:'pluszmunkanap', label:'+ Munkanap' },
+  '2026-03-15': { type:'munkaszunet',   label:'1848-as forradalom' },
+  '2026-04-03': { type:'munkaszunet',   label:'Nagypéntek' },
+  '2026-04-05': { type:'munkaszunet',   label:'Húsvétvasárnap' },
+  '2026-04-06': { type:'munkaszunet',   label:'Húsvéthétfő' },
+  '2026-05-01': { type:'munkaszunet',   label:'Munka ünnepe' },
+  '2026-05-24': { type:'munkaszunet',   label:'Pünkösdvasárnap' },
+  '2026-05-25': { type:'munkaszunet',   label:'Pünkösdhétfő' },
+  '2026-08-08': { type:'pluszmunkanap', label:'+ Munkanap' },
+  '2026-08-20': { type:'munkaszunet',   label:'Államalapítás' },
+  '2026-08-21': { type:'pihenonap',     label:'Pihenőnap' },
+  '2026-10-23': { type:'munkaszunet',   label:'1956-os forradalom' },
+  '2026-11-01': { type:'munkaszunet',   label:'Mindenszentek' },
+  '2026-12-12': { type:'pluszmunkanap', label:'+ Munkanap' },
+  '2026-12-24': { type:'pihenonap',     label:'Szenteste' },
+  '2026-12-25': { type:'munkaszunet',   label:'Karácsony' },
+  '2026-12-26': { type:'munkaszunet',   label:'Karácsony' },
 };
-const SPECIAL_LABELS = { munkaszunet:'Munkaszünet', pihenonap:'Pihenőnap', pluszmunkanap:'+ Munkanap' };
-function getSpecialDay(ds){
-  if (SPECIAL_DAYS.munkaszunet.has(ds))   return 'munkaszunet';
-  if (SPECIAL_DAYS.pihenonap.has(ds))     return 'pihenonap';
-  if (SPECIAL_DAYS.pluszmunkanap.has(ds)) return 'pluszmunkanap';
-  return null;
-}
+function getSpecialDay(ds){ return SPECIAL_DAYS[ds] || null; }
 
 let calWeekOffset    = 0;
 let calMonthOffset   = 0;
@@ -206,7 +213,7 @@ function calNav(dir){
 function setCalMode(mode){
   calViewMode = mode;
   document.querySelectorAll('.cal-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-  document.getElementById('cal-grid-wrap').classList.toggle('month-mode', mode === 'month');
+  document.getElementById('mainStage').classList.toggle('cal-week', mode === 'week');
   loadEntries();
 }
 function toggleCrewFilter(crew, btn){
@@ -232,8 +239,9 @@ function buildDayLabel(day, extraStyle){
   </div>`;
 }
 
-function specialChipHtml(special){
-  return `<div class="cal-entry type-${special} cal-special">${SPECIAL_LABELS[special]}</div>`;
+function specialChipHtml(special, small){
+  const s = small ? ' style="font-size:9px;padding:2px 5px"' : '';
+  return `<div class="cal-entry type-${special.type} cal-special"${s}>${special.label}</div>`;
 }
 
 function renderCalendar(){
@@ -277,7 +285,7 @@ function renderWeek(visCrews, today){
     visCrews.forEach(crew => {
       const e = CAL_DATA[calKey(ds, crew)];
       html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:0" onclick="openCalEntry('${ds}','${crew}',this)">`;
-      if (special) html += specialChipHtml(special);
+      if (special) html += specialChipHtml(special, false);
       if (e){
         const lbl = entryLabel(e);
         html += `<div class="cal-entry type-${e.type}" title="${lbl}"
@@ -310,7 +318,7 @@ function renderMonth(visCrews, today){
     visCrews.forEach(crew => {
       const e = CAL_DATA[calKey(ds, crew)];
       html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:36px;padding:3px 5px" onclick="openCalEntry('${ds}','${crew}',this)">`;
-      if (special) html += `<div class="cal-entry type-${special} cal-special" style="font-size:9px;padding:2px 5px">${SPECIAL_LABELS[special]}</div>`;
+      if (special) html += specialChipHtml(special, true);
       if (e){
         const lbl = entryLabel(e);
         html += `<div class="cal-entry type-${e.type}" style="font-size:9px;padding:2px 5px" title="${lbl}"
@@ -444,6 +452,7 @@ document.addEventListener('click', ev => {
     closeCalEntry();
 });
 
+document.getElementById('mainStage').classList.add('cal-week');
 loadEligibleProjects();
 loadEntries();
 </script>
