@@ -1220,6 +1220,6 @@ def admin_backup(session: Session = Depends(get_session)):
     )
 
 
-@app.get("/settings/panel", response_class=HTMLResponse)
-def settings_panel(request: Request):
-    return templates.TemplateResponse("settings_panel.html", {"request": request})
+@app.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request):
+    return templates.TemplateResponse("settings.html", {"request": request, "active_page": "settings"})

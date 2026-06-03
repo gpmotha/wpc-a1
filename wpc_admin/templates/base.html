@@ -84,9 +84,7 @@
     </a>
 
     <!-- Settings -->
-    <a class="step {% if active_page == 'settings' %}active{% endif %}" href="#"
-       hx-get="/settings/panel" hx-target="#detail-panel" hx-swap="innerHTML"
-       onclick="selectStep(this)" title="Beállítások">
+    <a class="step {% if active_page == 'settings' %}active{% endif %}" href="/settings" title="Beállítások">
       <div class="step__no">
         <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" class="icon-stroke">
           <circle cx="12" cy="12" r="3"/>
@@ -118,6 +116,7 @@
   <div class="app-right">
 
     <header class="topbar">
+      <h1 class="topbar__title">{% block page_title %}{% endblock %}</h1>
       <div class="topbar__spacer"></div>
       {% block topbar_actions %}{% endblock %}
       <div class="user-chip user-chip--topbar">
@@ -192,18 +191,11 @@
     }
   }
 
-  /* ── Settings step select ── */
-  function selectStep(el) {
-    document.querySelectorAll('.step.active-temp').forEach(s => s.classList.remove('active-temp'));
-    el.classList.add('active-temp');
-  }
-
   /* ── Detail panel open/close ── */
   function closeDetail() {
     document.getElementById('detail-panel').innerHTML = '';
     document.getElementById('appBody').classList.remove('panel-open');
     document.querySelectorAll('.selected').forEach(r => r.classList.remove('selected'));
-    document.querySelectorAll('.step.active-temp').forEach(s => s.classList.remove('active-temp'));
   }
 
   document.body.addEventListener('htmx:afterSwap', function (e) {

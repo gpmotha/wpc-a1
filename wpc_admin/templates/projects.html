@@ -1,16 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Projektek{% endblock %}
 
+{% block page_title %}Aktív projektek{% endblock %}
+
 {% block topbar_actions %}
 <a href="/projects/new" class="topbar-primary">+ Új projekt</a>
 {% endblock %}
 
 {% block content %}
-<div class="stage__head">
-  <div class="stage__kicker">01 · Munkák</div>
-  <h1 class="stage__title">Aktív projektek</h1>
-  <p class="stage__lead">Pipeline áttekintés — státusz szerint csoportosítva.</p>
-</div>
 
 <div class="stat-strip">
   <div class="stat-cell">
