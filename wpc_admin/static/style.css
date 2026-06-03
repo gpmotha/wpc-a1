@@ -313,7 +313,49 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .close-btn:hover { border-color: var(--ink-3); color: var(--ink); }
 
 /* ── FORM ─────────────────────────────────────────────────────────────── */
-.form-page { max-width: 740px; }
+.form-page { max-width: 960px; }
+
+/* ── FORM TABS ────────────────────────────────────────────────────────── */
+.form-tabs {
+  display: flex; gap: 2px; margin-bottom: 0;
+  border-bottom: 1px solid var(--rule);
+}
+.form-tab {
+  padding: 8px 16px; font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; border: 1px solid transparent; border-bottom: none;
+  background: transparent; color: var(--ink-3); cursor: pointer; border-radius: 7px 7px 0 0;
+  transition: .12s; margin-bottom: -1px; white-space: nowrap;
+}
+.form-tab:hover { color: var(--ink-2); background: var(--sunk); }
+.form-tab.active {
+  background: var(--card); color: var(--clay);
+  border-color: var(--rule); border-bottom-color: var(--card);
+}
+.form-tab-panel { display: none; padding-top: 24px; }
+.form-tab-panel.active { display: block; }
+
+/* Ügyfél tab two-column layout with map */
+.ugyfel-layout {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start;
+}
+.ugyfel-map-wrap {
+  position: sticky; top: 0;
+}
+.ugyfel-map-label {
+  font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--clay); margin-bottom: 10px; display: flex; align-items: center; gap: 10px;
+}
+.ugyfel-map-label::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+#formMap {
+  height: 280px; border-radius: 10px; border: 1px solid var(--rule);
+  overflow: hidden; box-shadow: var(--shadow);
+}
+.map-geocode-hint {
+  margin-top: 8px; font-family: var(--mono); font-size: 10px; color: var(--ink-4);
+  display: flex; align-items: center; gap: 6px;
+}
+.map-geocode-hint.found { color: var(--moss); }
+.map-geocode-hint.searching { color: var(--amber); }
 .form-section-title {
   font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
   color: var(--clay); margin-bottom: 14px; display: flex; align-items: center; gap: 10px;
@@ -539,7 +581,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .cal-entry.add-btn{background:transparent;border-left-color:transparent;color:var(--ink-4);opacity:0;transition:opacity .12s}
 .cal-cell:hover .cal-entry.add-btn{opacity:1}
 
-.cal-popup{position:fixed;z-index:400;background:var(--card);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow-lg);width:310px;animation:popIn .15s ease}
+.cal-popup{position:fixed;z-index:400;background:var(--card);border:1px solid var(--rule);border-radius:10px;box-shadow:var(--shadow-lg);width:330px;animation:popIn .15s ease}
 @keyframes popIn{from{transform:scale(.97) translateY(4px);opacity:0}to{transform:scale(1) translateY(0);opacity:1}}
 .cal-popup-head{padding:11px 16px 9px;border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:space-between}
 .cal-popup-title{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--clay)}
@@ -576,9 +618,11 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .cem-type-tag.type-lebeszelt{border-color:var(--sky);color:var(--sky)}
 .cem-type-tag.type-lebeszelt.active{background:var(--sky-soft)}
 
-/* ── special day badges in day label ────────────────────────────────────── */
-.cal-day-special{display:flex;flex-direction:column;gap:2px;margin-top:3px}
-.cal-day-badge{font-family:var(--mono);font-size:8px;padding:1px 4px;border-radius:3px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.cal-day-badge.munkaszunet{background:var(--red-soft);color:var(--red)}
-.cal-day-badge.pihenonap{background:var(--amber-soft);color:var(--amber)}
-.cal-day-badge.pluszmunkanap{background:var(--moss-soft);color:var(--moss)}
+/* ── special day chips in crew cells ─────────────────────────────────────── */
+.cal-entry.type-pihenonap{background:var(--amber-soft);border-left-color:var(--amber);color:var(--amber)}
+.cal-entry.type-pluszmunkanap{background:var(--moss-soft);border-left-color:var(--moss);color:var(--moss)}
+.cal-entry.cal-special{pointer-events:none;opacity:.45;cursor:default}
+
+/* ── extend buttons ──────────────────────────────────────────────────────── */
+.extend-btn-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+.form-btn.extend{padding:5px 10px;font-size:10px;letter-spacing:.05em}

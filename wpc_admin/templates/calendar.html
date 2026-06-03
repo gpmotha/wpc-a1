@@ -9,7 +9,6 @@
   <p class="stage__lead">Heti és havi nézet, szerkeszthető bejegyzések.</p>
 </div>
 
-<!-- toolbar -->
 <div class="cal-toolbar">
   <button class="cal-nav-btn" onclick="calNav(-1)">← Előző</button>
   <button class="cal-nav-btn" onclick="calNav(0)">Ma</button>
@@ -22,17 +21,14 @@
   <div class="cal-crew-filter" id="cal-crew-filter"></div>
 </div>
 
-<!-- legend -->
 <div class="cal-legend">
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--sky)"></div>Munka</div>
-  <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--sky);opacity:.55"></div>✓ Lebeszélve</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--moss)"></div>Szabadság</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--amber)"></div>Eső / időjárás</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:var(--red)"></div>Munkaszünet</div>
   <div class="cal-legend-item"><div class="cal-legend-dot" style="background:#5b3f8c"></div>Beteg</div>
 </div>
 
-<!-- grid -->
 <div id="cal-grid-wrap"></div>
 
 <!-- entry popup -->
@@ -42,11 +38,11 @@
     <button class="close-btn" onclick="closeCalEntry()">✕</button>
   </div>
   <div class="cal-popup-body">
+
     <div style="margin-bottom:14px">
       <label class="form-lbl">Nap típusa</label>
-      <div class="cem-type-tags" id="cem-type-tags">
+      <div class="cem-type-tags">
         <button class="cem-type-tag type-munka"       data-type="munka"       onclick="selectType('munka')">Munka</button>
-        <button class="cem-type-tag type-lebeszelt"   data-type="lebeszelt"   onclick="selectType('lebeszelt')">✓ Lebeszélve</button>
         <button class="cem-type-tag type-szabi"       data-type="szabi"       onclick="selectType('szabi')">Szabadság</button>
         <button class="cem-type-tag type-eso"         data-type="eso"         onclick="selectType('eso')">Eső</button>
         <button class="cem-type-tag type-szel"        data-type="szel"        onclick="selectType('szel')">Szél / Hó</button>
@@ -62,6 +58,15 @@
              autocomplete="off" list="cem-project-list">
       <datalist id="cem-project-list"></datalist>
       <input type="hidden" id="cem-projectId">
+      <div id="cem-extend-row" style="display:none;margin-top:10px">
+        <label class="form-lbl">Folytatás következő napokra</label>
+        <div class="extend-btn-row">
+          <button class="form-btn extend" type="button" onclick="extendEntry(1)">+1 nap</button>
+          <button class="form-btn extend" type="button" onclick="extendEntry(2)">+2 nap</button>
+          <button class="form-btn extend" type="button" onclick="extendEntry(3)">+3 nap</button>
+          <button class="form-btn extend" type="button" onclick="extendEntry(5)">+5 nap</button>
+        </div>
+      </div>
     </div>
 
     <div id="cem-free-text-row" style="display:none">
@@ -84,14 +89,13 @@
 
 {% block extra_js %}
 <style>
-  /* weekly calendar fills the stage vertically */
   #mainStage { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 12px; }
-  #cal-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; }
+  #cal-grid-wrap { flex: 1; min-height: 0; overflow: hidden; }
+  #cal-grid-wrap.month-mode { overflow-y: auto; }
   #cal-grid-wrap .cal-grid.week-mode { height: 100%; overflow: hidden; }
   #cal-grid-wrap .cal-grid.week-mode .cal-cell { min-height: 0; }
 </style>
 <script>
-// ── Constants ────────────────────────────────────────────────────────────────
 const CREWS      = ['Laci','Jenő','Csaba','Dani','Alex'];
 const _css       = getComputedStyle(document.documentElement);
 const CREW_COLORS = {
@@ -105,7 +109,7 @@ const DAYS_HU   = ['Hétfő','Kedd','Szerda','Csütörtök','Péntek','Szombat',
 const MONTHS_HU = ['január','február','március','április','május','június',
                    'július','augusztus','szeptember','október','november','december'];
 
-// ── 2026 Hungarian special days ───────────────────────────────────────────────
+// 2026 Hungarian special days
 const SPECIAL_DAYS = {
   munkaszunet: new Set([
     '2026-01-01','2026-03-15','2026-04-03','2026-04-05','2026-04-06',
@@ -115,11 +119,7 @@ const SPECIAL_DAYS = {
   pihenonap:     new Set(['2026-01-02','2026-08-21','2026-12-24']),
   pluszmunkanap: new Set(['2026-01-10','2026-08-08','2026-12-12']),
 };
-const SPECIAL_LABELS = {
-  munkaszunet:   'Munkaszünet',
-  pihenonap:     'Pihenőnap',
-  pluszmunkanap: '+ Munkanap',
-};
+const SPECIAL_LABELS = { munkaszunet:'Munkaszünet', pihenonap:'Pihenőnap', pluszmunkanap:'+ Munkanap' };
 function getSpecialDay(ds){
   if (SPECIAL_DAYS.munkaszunet.has(ds))   return 'munkaszunet';
   if (SPECIAL_DAYS.pihenonap.has(ds))     return 'pihenonap';
@@ -127,7 +127,6 @@ function getSpecialDay(ds){
   return null;
 }
 
-// ── State ─────────────────────────────────────────────────────────────────────
 let calWeekOffset    = 0;
 let calMonthOffset   = 0;
 let calViewMode      = 'week';
@@ -136,7 +135,6 @@ let calEditTarget    = null;
 let CAL_DATA         = {};
 let eligibleProjects = [];
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 function isoDate(d){ return d.toISOString().slice(0,10); }
 function calKey(ds, crew){ return ds + '|' + crew; }
 
@@ -146,7 +144,6 @@ function getWeekStart(offset){
   t.setDate(t.getDate() - dow + offset*7);
   return t;
 }
-
 function getMonthDays(offset){
   const t = new Date(); t.setDate(1); t.setHours(0,0,0,0);
   t.setMonth(t.getMonth() + offset);
@@ -154,16 +151,14 @@ function getMonthDays(offset){
   const n = new Date(y, m+1, 0).getDate();
   return Array.from({length:n}, (_,i) => new Date(y, m, i+1));
 }
-
 function getViewRange(){
   if (calViewMode === 'week'){
     const ws = getWeekStart(calWeekOffset);
     const we = new Date(ws); we.setDate(ws.getDate()+6);
     return { from: isoDate(ws), to: isoDate(we) };
-  } else {
-    const days = getMonthDays(calMonthOffset);
-    return { from: isoDate(days[0]), to: isoDate(days[days.length-1]) };
   }
+  const days = getMonthDays(calMonthOffset);
+  return { from: isoDate(days[0]), to: isoDate(days[days.length-1]) };
 }
 
 function entryLabel(e){
@@ -175,14 +170,12 @@ function entryLabel(e){
   return e.text || e.type;
 }
 
-// ── Data ──────────────────────────────────────────────────────────────────────
 async function loadEligibleProjects(){
   if (eligibleProjects.length) return;
   const r = await fetch('/api/projects/eligible');
   eligibleProjects = await r.json();
   buildAutocomplete();
 }
-
 function buildAutocomplete(){
   const list = document.getElementById('cem-project-list');
   if (!list) return;
@@ -195,7 +188,6 @@ function buildAutocomplete(){
     list.appendChild(opt);
   });
 }
-
 async function loadEntries(){
   const { from, to } = getViewRange();
   const r = await fetch(`/api/calendar/entries?from=${from}&to=${to}`);
@@ -205,56 +197,48 @@ async function loadEntries(){
   renderCalendar();
 }
 
-// ── Navigation ────────────────────────────────────────────────────────────────
 function calNav(dir){
   if (dir === 0){ calWeekOffset = 0; calMonthOffset = 0; }
   else if (calViewMode === 'week') calWeekOffset += dir;
   else calMonthOffset += dir;
   loadEntries();
 }
-
 function setCalMode(mode){
   calViewMode = mode;
   document.querySelectorAll('.cal-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('cal-grid-wrap').classList.toggle('month-mode', mode === 'month');
   loadEntries();
 }
-
 function toggleCrewFilter(crew, btn){
   if (calVisibleCrews.has(crew)){
     if (calVisibleCrews.size === 1) return;
     calVisibleCrews.delete(crew);
-    btn.style.cssText = '';
-    btn.classList.remove('active');
+    btn.style.cssText = ''; btn.classList.remove('active');
   } else {
-    calVisibleCrews.add(crew);
-    btn.classList.add('active');
+    calVisibleCrews.add(crew); btn.classList.add('active');
     btn.style.cssText = `background:${CREW_COLORS[crew]};color:#fff;border-color:transparent`;
   }
   renderCalendar();
 }
 
-// ── Day label (shared between week and month) ─────────────────────────────────
-function buildDayLabel(day, ds, extraStyle){
+function buildDayLabel(day, extraStyle){
   const dow       = (day.getDay()+6)%7;
   const isWeekend = dow >= 5;
-  const isToday   = ds === isoDate(new Date());
-  const special   = getSpecialDay(ds);
+  const isToday   = isoDate(day) === isoDate(new Date());
   const cls = `cal-day-label${isWeekend?' weekend':''}${isToday?' today':''}`;
-  const badge = special
-    ? `<div class="cal-day-special"><span class="cal-day-badge ${special}">${SPECIAL_LABELS[special]}</span></div>`
-    : '';
   return `<div class="${cls}"${extraStyle ? ` style="${extraStyle}"` : ''}>
     <div class="cal-day-num">${day.getDate()}</div>
     <div class="cal-day-name">${DAYS_HU[dow].slice(0,3)}</div>
-    ${badge}
   </div>`;
 }
 
-// ── Rendering ─────────────────────────────────────────────────────────────────
+function specialChipHtml(special){
+  return `<div class="cal-entry type-${special} cal-special">${SPECIAL_LABELS[special]}</div>`;
+}
+
 function renderCalendar(){
   const visCrews = CREWS.filter(c => calVisibleCrews.has(c));
   const today    = isoDate(new Date());
-
   const filterEl = document.getElementById('cal-crew-filter');
   if (!filterEl.dataset.built){
     filterEl.dataset.built = '1';
@@ -268,14 +252,13 @@ function renderCalendar(){
       filterEl.appendChild(btn);
     });
   }
-
   if (calViewMode === 'week') renderWeek(visCrews, today);
   else renderMonth(visCrews, today);
 }
 
 function renderWeek(visCrews, today){
   const ws   = getWeekStart(calWeekOffset);
-  const days = Array.from({length:7}, (_, i) => { const d = new Date(ws); d.setDate(ws.getDate()+i); return d; });
+  const days = Array.from({length:7}, (_,i) => { const d = new Date(ws); d.setDate(ws.getDate()+i); return d; });
   const we   = days[6];
   document.getElementById('cal-week-label').textContent =
     `${ws.getFullYear()}. ${MONTHS_HU[ws.getMonth()]} ${ws.getDate()}. — ${MONTHS_HU[we.getMonth()]} ${we.getDate()}.`;
@@ -285,15 +268,16 @@ function renderWeek(visCrews, today){
   visCrews.forEach(crew => {
     html += `<div class="cal-header-cell" style="border-top:3px solid ${CREW_COLORS[crew]};color:${CREW_COLORS[crew]}">${crew}</div>`;
   });
-
   days.forEach(day => {
     const ds  = isoDate(day);
     const dow = (day.getDay()+6)%7;
     const isWeekend = dow >= 5, isToday = ds === today;
-    html += buildDayLabel(day, ds);
+    const special   = getSpecialDay(ds);
+    html += buildDayLabel(day);
     visCrews.forEach(crew => {
       const e = CAL_DATA[calKey(ds, crew)];
       html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:0" onclick="openCalEntry('${ds}','${crew}',this)">`;
+      if (special) html += specialChipHtml(special);
       if (e){
         const lbl = entryLabel(e);
         html += `<div class="cal-entry type-${e.type}" title="${lbl}"
@@ -317,15 +301,16 @@ function renderMonth(visCrews, today){
   visCrews.forEach(crew => {
     html += `<div class="cal-header-cell" style="border-top:3px solid ${CREW_COLORS[crew]};color:${CREW_COLORS[crew]}">${crew}</div>`;
   });
-
   days.forEach(day => {
     const ds  = isoDate(day);
     const dow = (day.getDay()+6)%7;
     const isWeekend = dow >= 5, isToday = ds === today;
-    html += buildDayLabel(day, ds, 'min-height:36px;padding:5px 8px');
+    const special   = getSpecialDay(ds);
+    html += buildDayLabel(day, 'min-height:36px;padding:5px 8px');
     visCrews.forEach(crew => {
       const e = CAL_DATA[calKey(ds, crew)];
       html += `<div class="cal-cell${isWeekend?' weekend':''}${isToday?' today-row':''}" style="min-height:36px;padding:3px 5px" onclick="openCalEntry('${ds}','${crew}',this)">`;
+      if (special) html += `<div class="cal-entry type-${special} cal-special" style="font-size:9px;padding:2px 5px">${SPECIAL_LABELS[special]}</div>`;
       if (e){
         const lbl = entryLabel(e);
         html += `<div class="cal-entry type-${e.type}" style="font-size:9px;padding:2px 5px" title="${lbl}"
@@ -338,7 +323,6 @@ function renderMonth(visCrews, today){
   document.getElementById('cal-grid-wrap').innerHTML = html;
 }
 
-// ── Type tag selection ────────────────────────────────────────────────────────
 function selectType(type){
   document.getElementById('cem-type').value = type;
   document.querySelectorAll('.cem-type-tag').forEach(t =>
@@ -347,29 +331,26 @@ function selectType(type){
   updateCemProjectRow();
 }
 
-// ── Entry popup ───────────────────────────────────────────────────────────────
 function openCalEntry(dateStr, crew, cellEl){
   calEditTarget = { dateStr, crew };
   const e = CAL_DATA[calKey(dateStr, crew)];
-
   const d = new Date(dateStr);
   document.getElementById('cem-title').textContent =
     `${crew} — ${d.getDate()}. ${MONTHS_HU[d.getMonth()]}`;
 
-  const type = e ? e.type : 'munka';
+  const type = (e && e.type !== 'lebeszelt') ? e.type : (e ? 'munka' : 'munka');
   selectType(type);
 
-  const isMunkaLike = type === 'munka' || type === 'lebeszelt';
-  document.getElementById('cem-text').value      = (e && isMunkaLike)  ? (e.project_name || e.text || '') : '';
-  document.getElementById('cem-free-text').value = (e && !isMunkaLike) ? (e.text || '') : '';
+  document.getElementById('cem-text').value      = (e && (e.type === 'munka' || e.type === 'lebeszelt')) ? (e.project_name || e.text || '') : '';
+  document.getElementById('cem-free-text').value = (e && e.type !== 'munka' && e.type !== 'lebeszelt') ? (e.text || '') : '';
   document.getElementById('cem-projectId').value = (e && e.project_id) ? e.project_id : '';
 
   const modal = document.getElementById('calEntryModal');
   modal.style.display = 'block';
   const rect = cellEl.getBoundingClientRect();
   let top = rect.bottom + 6, left = rect.left;
-  if (left + 340 > window.innerWidth)  left = window.innerWidth - 346;
-  if (top  + 320 > window.innerHeight) top  = rect.top - 328;
+  if (left + 346 > window.innerWidth)  left = window.innerWidth - 352;
+  if (top  + 340 > window.innerHeight) top  = rect.top - 348;
   modal.style.top = top + 'px'; modal.style.left = left + 'px';
 
   buildAutocomplete();
@@ -381,10 +362,12 @@ function updateCemProjectRow(){
   const projectRow  = document.getElementById('cem-project-row');
   const freeTextRow = document.getElementById('cem-free-text-row');
   const weatherInfo = document.getElementById('cem-weather-info');
+  const extendRow   = document.getElementById('cem-extend-row');
 
-  projectRow.style.display  = (type === 'munka' || type === 'lebeszelt') ? 'block' : 'none';
+  projectRow.style.display  = (type === 'munka') ? 'block' : 'none';
   freeTextRow.style.display = ['szabi','beteg','munkaszunet'].includes(type) ? 'block' : 'none';
   weatherInfo.style.display = (type === 'eso' || type === 'szel') ? 'block' : 'none';
+  extendRow.style.display   = (type === 'munka') ? 'block' : 'none';
 
   if (type === 'eso')  weatherInfo.textContent = 'Esős nap — csak ennél a csapatnál kerül rögzítésre.';
   if (type === 'szel') weatherInfo.textContent = 'Szeles/havas nap — csak ennél a csapatnál kerül rögzítésre.';
@@ -405,29 +388,52 @@ function closeCalEntry(){
 async function saveCalEntry(){
   if (!calEditTarget) return;
   const { dateStr, crew } = calEditTarget;
-  const type        = document.getElementById('cem-type').value;
-  const isMunkaLike = type === 'munka' || type === 'lebeszelt';
-  const projectId   = document.getElementById('cem-projectId').value || null;
-  const text        = isMunkaLike
+  const type      = document.getElementById('cem-type').value;
+  const projectId = document.getElementById('cem-projectId').value || null;
+  const text      = type === 'munka'
     ? document.getElementById('cem-text').value.trim()
     : document.getElementById('cem-free-text').value.trim();
 
   await fetch('/api/calendar/entries', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({ date: dateStr, crew, type, text, project_id: projectId ? parseInt(projectId) : null }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: dateStr, crew, type, text, project_id: projectId ? parseInt(projectId) : null }),
   });
   closeCalEntry();
   await loadEntries();
   showToast('Mentve ✓');
 }
 
+async function extendEntry(n){
+  if (!calEditTarget) return;
+  const { dateStr, crew } = calEditTarget;
+  const type      = document.getElementById('cem-type').value;
+  const projectId = document.getElementById('cem-projectId').value || null;
+  const text      = document.getElementById('cem-text').value.trim();
+  const pid       = projectId ? parseInt(projectId) : null;
+
+  // save current day first
+  await fetch('/api/calendar/entries', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: dateStr, crew, type, text, project_id: pid }),
+  });
+  // add to next n days
+  const base = new Date(dateStr + 'T12:00:00');
+  for (let i = 1; i <= n; i++){
+    const d = new Date(base); d.setDate(d.getDate() + i);
+    await fetch('/api/calendar/entries', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: isoDate(d), crew, type, text, project_id: pid }),
+    });
+  }
+  closeCalEntry();
+  await loadEntries();
+  showToast(`Mentve + ${n} nap ✓`);
+}
+
 async function deleteCalEntry(){
   if (!calEditTarget) return;
   const e = CAL_DATA[calKey(calEditTarget.dateStr, calEditTarget.crew)];
-  if (e && e.id){
-    await fetch(`/api/calendar/entries/${e.id}`, { method: 'DELETE' });
-  }
+  if (e && e.id) await fetch(`/api/calendar/entries/${e.id}`, { method: 'DELETE' });
   closeCalEntry();
   await loadEntries();
 }
