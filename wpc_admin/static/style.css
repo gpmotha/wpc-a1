@@ -622,6 +622,7 @@ td { padding: 12px 14px; font-size: 13px; vertical-align: middle; }
 .cal-entry.type-pihenonap{background:var(--amber-soft);border-left-color:var(--amber);color:var(--amber)}
 .cal-entry.type-pluszmunkanap{background:var(--moss-soft);border-left-color:var(--moss);color:var(--moss)}
 .cal-entry.cal-special{pointer-events:none;opacity:.45;cursor:default}
+.cal-entry.full-day{flex:1;border-left-width:0;border-radius:4px;display:flex;align-items:center;padding:0 8px;white-space:normal;line-height:1.3}
 
 /* ── extend buttons ──────────────────────────────────────────────────────── */
 .extend-btn-row{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
