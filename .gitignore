@@ -12,6 +12,12 @@ __pycache__/
 *.jpg
 *.jpeg
 
+# Build artifacts
+*.tar
+
+# Logs
+wpc_admin/logs/
+
 # OS
 .DS_Store
 Thumbs.db
