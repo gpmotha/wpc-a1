@@ -457,7 +457,7 @@ def _parse_form(form) -> tuple[dict, dict, dict]:
 def project_new_form(request: Request):
     return templates.TemplateResponse(
         "project_form.html",
-        {"request": request, "module": "admin", "p": None, **_ENUM_CTX},
+        context={"request": request, "module": "admin", "p": None, **_ENUM_CTX},
     )
 
 
@@ -495,7 +495,7 @@ def project_edit_form(
         return HTMLResponse("<p>Nem található</p>", status_code=404)
     return templates.TemplateResponse(
         "project_form.html",
-        {"request": request, "module": "admin", "p": p, **_ENUM_CTX},
+        context={"request": request, "module": "admin", "p": p, **_ENUM_CTX},
     )
 
 
@@ -558,7 +558,7 @@ def project_delete_confirm(
         return HTMLResponse("<p>Nem található</p>", status_code=404)
     return templates.TemplateResponse(
         "confirm_delete.html",
-        {"request": request, "module": "admin", "p": p},
+        context={"request": request, "module": "admin", "p": p},
     )
 
 
@@ -728,7 +728,7 @@ def garancia_view(request: Request, session: Session = Depends(get_session)):
 def map_view(request: Request):
     return templates.TemplateResponse(
         "map.html",
-        {"request": request, "module": "admin", "active_page": "map"},
+        context={"request": request, "module": "admin", "active_page": "map"},
     )
 
 
@@ -979,7 +979,7 @@ def admin_geocode_status():
 def calendar_view(request: Request):
     return templates.TemplateResponse(
         "calendar.html",
-        {"request": request, "module": "admin", "active_page": "calendar"},
+        context={"request": request, "module": "admin", "active_page": "calendar"},
     )
 
 

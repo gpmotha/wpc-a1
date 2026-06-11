@@ -10,5 +10,5 @@ services:
       - /volume1/docker/wpc-admin/data:/app/data
     environment:
       - DATABASE_URL=sqlite:////app/data/wpc.db
-      - WPC_PASSWORD=changeme
+      - WPC_PASSWORD=Torrente78!
     restart: unless-stopped
