@@ -15,6 +15,9 @@ __pycache__/
 # Build artifacts
 *.tar
 
+# Deployment scripts (contain sensitive info)
+deploy.bat
+
 # Logs
 wpc_admin/logs/
 
