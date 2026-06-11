@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  wpc-admin:
+    build: .
+    container_name: wpc-admin
+    ports:
+      - "8000:8000"
+    volumes:
+      - /volume1/docker/wpc-admin/data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:////app/data/wpc.db
+      - WPC_PASSWORD=changeme
+    restart: unless-stopped

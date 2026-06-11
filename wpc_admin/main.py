@@ -1,5 +1,7 @@
 import logging
 import logging.handlers
+import os
+import secrets
 import time
 from contextlib import asynccontextmanager
 from datetime import date, datetime, timedelta
@@ -8,8 +10,9 @@ from pathlib import Path
 
 import openpyxl
 
-from fastapi import BackgroundTasks, Depends, FastAPI, Request
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlmodel import Session, SQLModel, select
@@ -235,7 +238,20 @@ async def lifespan(app: FastAPI):
     logger.info("WPC Admin shutting down")
 
 
-app = FastAPI(title="WPC Projekt Adminisztrátor", lifespan=lifespan)
+_security = HTTPBasic()
+
+
+def require_auth(credentials: HTTPBasicCredentials = Depends(_security)) -> None:
+    ok_user = secrets.compare_digest(credentials.username, "wpc")
+    ok_pass = secrets.compare_digest(credentials.password, os.getenv("WPC_PASSWORD", "changeme"))
+    if not (ok_user and ok_pass):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Basic"},
+        )
+
+
+app = FastAPI(title="WPC Projekt Adminisztrátor", lifespan=lifespan, dependencies=[Depends(require_auth)])
 app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/icons", StaticFiles(directory="icons"), name="icons")
 templates = Jinja2Templates(directory="templates")
